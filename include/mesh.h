@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -22,20 +23,26 @@ struct NodeSet {
   std::vector<int> nodeIndices;
 };
 
-// Utility Functions
 std::string trim(const std::string &str) {
-  size_t first = str.find_first_not_of(' ');
-  if (std::string::npos == first) {
-    return str;
+  // Include other whitespace characters like '\t', '\n', '\r', '\f', '\v'
+  const std::string WHITESPACE = " \t\n\r\f\v";
+
+  size_t first = str.find_first_not_of(WHITESPACE);
+  if (first == std::string::npos) {
+    return "";  // Return an empty string if only whitespace characters are
+                // found
   }
-  size_t last = str.find_last_not_of(' ');
+
+  size_t last = str.find_last_not_of(WHITESPACE);
   return str.substr(first, (last - first + 1));
 }
 
 // Main Parsing Logic
 template <typename T>
 void load_mesh(std::string filename, int *num_elements, int *num_nodes,
-               int **element_nodes, T **xloc) {
+               int *num_node_sets, int **element_nodes, T **xloc,
+               int **node_set_starts, int **node_set_indices,
+               std::vector<std::string> *node_set_names) {
   std::ifstream meshFile(filename);
   if (!meshFile.is_open()) {
     std::cerr << "Failed to open file: " << filename << std::endl;
@@ -46,6 +53,7 @@ void load_mesh(std::string filename, int *num_elements, int *num_nodes,
   std::vector<Node> nodes;
   std::map<int, Element> elements;
   std::map<std::string, NodeSet> nodeSets;
+  std::vector<std::string> node_set_names_temp;
 
   bool inNodesSection = false, inElementsSection = false,
        inNodeSetsSection = false;
@@ -125,11 +133,18 @@ void load_mesh(std::string filename, int *num_elements, int *num_nodes,
         }
       }
       elements[element.index] = element;
-    } else if (inNodeSetsSection && !currentSetName.empty()) {
-      std::istringstream iss(line);
-      int nodeIndex;
-      while (iss >> nodeIndex) {
-        nodeSets[currentSetName].nodeIndices.push_back(nodeIndex);
+    } else if (inNodeSetsSection) {
+      std::istringstream iss(
+          line);  // Add a trailing comma to ensure the last token is parsed.
+      std::string token;
+      std::regex numberPattern("^\\d+$");
+      while (std::getline(iss, token, ',')) {
+        token = trim(token);
+
+        if (!token.empty()) {
+          int nodeIndex = std::stoi(token);
+          nodeSets[currentSetName].nodeIndices.push_back(nodeIndex);
+        }
       }
     }
   }
@@ -156,8 +171,41 @@ void load_mesh(std::string filename, int *num_elements, int *num_nodes,
     x[3 * (node.index - 1) + 2] = node.z;
   }
 
-  *num_elements = num_elems;
+  // Count the total number of indices across all node sets
+  int totalNodeSetIndices = 0;
+  for (const auto &nodeset : nodeSets) {
+    totalNodeSetIndices += nodeset.second.nodeIndices.size();
+  }
+
+  int *flatNodeSetIndices = new int[totalNodeSetIndices];
+
+  int *nodeSetStarts = new int[nodeSets.size() + 1];
+
+  int currentIndex = 0;
+  int nodeSetCount = 0;
+
+  for (const auto &nodeset : nodeSets) {
+    nodeSetStarts[nodeSetCount] = currentIndex;
+    node_set_names_temp.push_back(nodeset.second.name);
+
+    for (int nodeIndex : nodeset.second.nodeIndices) {
+      flatNodeSetIndices[currentIndex++] = nodeIndex;
+    }
+    nodeSetCount++;
+  }
+
+  // The last number in nodeSetStarts is the total length of the array
+  // To more easily iterate through the array
+  if (!nodeSets.empty()) {
+    nodeSetStarts[nodeSetCount] = totalNodeSetIndices;
+  }
+
+  for (const auto &nodeset : nodeSets) *num_elements = num_elems;
   *num_nodes = num_ns;
   *element_nodes = elem_nodes;
   *xloc = x;
+  *num_node_sets = nodeSets.size();
+  *node_set_starts = nodeSetStarts;
+  *node_set_indices = flatNodeSetIndices;
+  *node_set_names = node_set_names_temp;
 }

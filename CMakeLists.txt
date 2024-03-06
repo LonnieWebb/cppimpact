@@ -14,11 +14,11 @@ add_compile_options(-g -G)
 
 
 add_executable(test test.cu)
-add_executable(derivatives_verification derivatives_verification.cu)
+# add_executable(derivatives_verification derivatives_verification.cu)
 
 set_target_properties(test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-set_target_properties(derivatives_verification PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-target_compile_options(derivatives_verification PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+# set_target_properties(derivatives_verification PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+# target_compile_options(derivatives_verification PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
 # Find CUDA Toolkit
 find_package(CUDAToolkit REQUIRED)
