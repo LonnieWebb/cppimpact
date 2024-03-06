@@ -4,10 +4,10 @@
 template <typename T>
 class Dynamics {
  public:
-  int num_elements;
-  int num_nodes;
-  int* element_nodes;
+  int num_elements, num_nodes, num_node_sets;
+  int *element_nodes, *node_set_starts, *node_set_indices;
   T* xloc;
+  std::vector<std::string> node_set_names;
 
   void get_reduced_dofs() {
     // Extract the free dofs. The free dofs can be accessed via reduced_dofs
