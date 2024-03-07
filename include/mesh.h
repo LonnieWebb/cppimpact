@@ -1,3 +1,4 @@
+#pragma once
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -257,6 +258,13 @@ public:
     if (!nodeSets.empty())
     {
       nodeSetStarts[nodeSetCount] = totalNodeSetIndices;
+    }
+
+    // Account for the mesh indexing starting at 1
+
+    for (int i = 0; i < nodeSetStarts[nodeSets.size()]; i++)
+    {
+      flatNodeSetIndices[i] = flatNodeSetIndices[i] - 1;
     }
 
     num_node_sets = nodeSets.size();
