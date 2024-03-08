@@ -7,6 +7,7 @@
 #include "include/tetrahedral.h"
 #include "include/dynamics.h"
 #include "include/elastoplastic.h"
+#include "include/wall.h"
 
 int main(int argc, char *argv[])
 {
@@ -44,5 +45,12 @@ int main(int argc, char *argv[])
     T init_velocity[] = {0.0, -0.1, 0.0};
 
     dyna.initialize(init_position, init_velocity);
+
+    const int normal = -1;
+    std::string wall_name = "Wall";
+    T location = 3.0;
+
+    Wall<T, dof_per_node, normal> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes);
+
     dyna.solve();
 }

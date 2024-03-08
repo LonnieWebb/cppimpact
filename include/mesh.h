@@ -13,15 +13,15 @@ class Mesh
 {
 
 public:
-  int num_elements, num_nodes, num_node_sets, num_fixed_nodes;
-  int *element_nodes, *node_set_starts, *node_set_indices, *fixed_nodes;
+  int num_elements, num_nodes, num_node_sets, num_fixed_nodes, num_slave_nodes;
+  int *element_nodes, *node_set_starts, *node_set_indices, *fixed_nodes, *slave_nodes;
   T *xloc;
   std::vector<std::string> node_set_names;
 
   // Constructor
-  Mesh() : num_elements(0), num_nodes(0), num_node_sets(0),
+  Mesh() : num_elements(0), num_nodes(0), num_node_sets(0), num_fixed_nodes(0), num_slave_nodes(0),
            element_nodes(nullptr), node_set_starts(nullptr),
-           node_set_indices(nullptr), xloc(nullptr), fixed_nodes(nullptr) {}
+           node_set_indices(nullptr), xloc(nullptr), fixed_nodes(nullptr), slave_nodes(nullptr) {}
 
   // Destructor
   ~Mesh()
@@ -276,6 +276,7 @@ public:
 
     // Update fixed boundary conditions
     collect_fixed_nodes();
+    collect_slave_nodes();
   }
 
 private:
@@ -308,6 +309,40 @@ private:
         for (int j = start_idx; j < end_idx; ++j)
         {
           fixed_nodes[num_fixed_nodes++] = node_set_indices[j];
+        }
+      }
+    }
+  }
+
+  void collect_slave_nodes()
+  {
+
+    num_slave_nodes = 0;
+    slave_nodes = nullptr;
+
+    // Regex looks for "slave" in the set name, case insensitive
+    std::regex slave_regex("slave", std::regex_constants::icase);
+
+    for (int i = 0; i < num_node_sets; i++)
+    {
+      if (std::regex_search(node_set_names[i], slave_regex))
+      { // Check if name contains "slave" using regex
+        int start_idx = node_set_starts[i];
+        int end_idx = node_set_starts[i + 1];
+
+        // Resize slave_nodes if necessary
+        int *temp = new int[num_slave_nodes + (end_idx - start_idx)];
+        if (slave_nodes != nullptr)
+        {
+          std::copy(slave_nodes, slave_nodes + num_slave_nodes, temp);
+          delete[] slave_nodes;
+        }
+        slave_nodes = temp;
+
+        // Add node indices to slave_nodes
+        for (int j = start_idx; j < end_idx; ++j)
+        {
+          slave_nodes[num_slave_nodes++] = node_set_indices[j];
         }
       }
     }
