@@ -3,19 +3,46 @@
 #include <numeric>
 
 #include "mesh.h"
+#include "basematerial.h"
 
 template <typename T, int dof_per_node>
 class Dynamics
 {
 public:
   Mesh<T> *mesh;
+  BaseMaterial<T, dof_per_node> *material;
   int *reduced_dofs;
   int reduced_dofs_size;
+  int ndof;
 
-  Dynamics(Mesh<T> *input_mesh)
-      : mesh(input_mesh), reduced_dofs(nullptr), reduced_dofs_size(0) {}
+  T *acc;
 
-  ~Dynamics() { delete[] reduced_dofs; }
+  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material)
+      : mesh(input_mesh), material(input_material), reduced_dofs(nullptr), reduced_dofs_size(0), acc(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
+
+  ~Dynamics()
+  {
+    delete[] reduced_dofs;
+    delete[] acc;
+  }
+
+  // Initialize the body. Move the mesh origin to init_position and give all nodes init_acceleration.
+  void initialize(T init_position[dof_per_node], T init_acceleration[dof_per_node])
+  {
+
+    std::cout << "ndof: " << ndof << std::endl;
+    acc = new T[ndof];
+    for (int i = 0; i < mesh->num_nodes; i++)
+    {
+      acc[3 * i] = init_acceleration[0];
+      acc[3 * i + 1] = init_acceleration[1];
+      acc[3 * i + 2] = init_acceleration[2];
+
+      mesh->xloc[3 * i] = mesh->xloc[3 * i] + init_position[0];
+      mesh->xloc[3 * i + 1] = mesh->xloc[3 * i + 1] + init_position[1];
+      mesh->xloc[3 * i + 2] = mesh->xloc[3 * i + 2] + init_position[2];
+    }
+  }
 
   void get_node_global_dofs(const int node_idx, int *global_dof_idx)
   {
