@@ -15,28 +15,28 @@ public:
   int reduced_dofs_size;
   int ndof;
 
-  T *acc;
+  T *vel;
 
   Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material)
-      : mesh(input_mesh), material(input_material), reduced_dofs(nullptr), reduced_dofs_size(0), acc(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
+      : mesh(input_mesh), material(input_material), reduced_dofs(nullptr), reduced_dofs_size(0), vel(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
 
   ~Dynamics()
   {
     delete[] reduced_dofs;
-    delete[] acc;
+    delete[] vel;
   }
 
-  // Initialize the body. Move the mesh origin to init_position and give all nodes init_acceleration.
-  void initialize(T init_position[dof_per_node], T init_acceleration[dof_per_node])
+  // Initialize the body. Move the mesh origin to init_position and give all nodes init_velocity.
+  void initialize(T init_position[dof_per_node], T init_velocity[dof_per_node])
   {
 
     std::cout << "ndof: " << ndof << std::endl;
-    acc = new T[ndof];
+    vel = new T[ndof];
     for (int i = 0; i < mesh->num_nodes; i++)
     {
-      acc[3 * i] = init_acceleration[0];
-      acc[3 * i + 1] = init_acceleration[1];
-      acc[3 * i + 2] = init_acceleration[2];
+      vel[3 * i] = init_velocity[0];
+      vel[3 * i + 1] = init_velocity[1];
+      vel[3 * i + 2] = init_velocity[2];
 
       mesh->xloc[3 * i] = mesh->xloc[3 * i] + init_position[0];
       mesh->xloc[3 * i + 1] = mesh->xloc[3 * i + 1] + init_position[1];
