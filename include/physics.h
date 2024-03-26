@@ -1,8 +1,7 @@
 #pragma once
 #include <cmath>
 
-template <typename T>
-__device__ inline T inv3x3(const T A[], T Ainv[])
+template <typename T> inline T inv3x3(const T A[], T Ainv[])
 {
   T det =
       (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
@@ -24,8 +23,7 @@ __device__ inline T inv3x3(const T A[], T Ainv[])
   return det;
 }
 
-template <typename T>
-__device__ inline void mat3x3MatMult(const T A[], const T B[], T C[])
+template <typename T> inline void mat3x3MatMult(const T A[], const T B[], T C[])
 {
   C[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
@@ -40,8 +38,7 @@ __device__ inline void mat3x3MatMult(const T A[], const T B[], T C[])
   C[8] = A[6] * B[2] + A[7] * B[5] + A[8] * B[8];
 }
 
-template <typename T>
-__device__ inline void mat3x3MatTransMult(const T A[], const T B[], T C[])
+template <typename T> inline void mat3x3MatTransMult(const T A[], const T B[], T C[])
 {
   C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
@@ -56,16 +53,14 @@ __device__ inline void mat3x3MatTransMult(const T A[], const T B[], T C[])
   C[8] = A[6] * B[6] + A[7] * B[7] + A[8] * B[8];
 }
 
-template <typename T>
-__device__ inline T det3x3(const T A[])
+template <typename T> inline T det3x3(const T A[])
 {
   return (A[8] * (A[0] * A[4] - A[3] * A[1]) -
           A[7] * (A[0] * A[5] - A[3] * A[2]) +
           A[6] * (A[1] * A[5] - A[2] * A[4]));
 }
 
-template <typename T>
-__device__ inline void det3x3Sens(const T A[], T Ad[])
+template <typename T> inline void det3x3Sens(const T A[], T Ad[])
 {
   Ad[0] = A[8] * A[4] - A[7] * A[5];
   Ad[1] = A[6] * A[5] - A[8] * A[3];
@@ -80,8 +75,7 @@ __device__ inline void det3x3Sens(const T A[], T Ad[])
   Ad[8] = A[0] * A[4] - A[3] * A[1];
 }
 
-template <typename T>
-__device__ inline void addDet3x3Sens(const T s, const T A[], T Ad[])
+template <typename T> inline void addDet3x3Sens(const T s, const T A[], T Ad[])
 {
   Ad[0] += s * (A[8] * A[4] - A[7] * A[5]);
   Ad[1] += s * (A[6] * A[5] - A[8] * A[3]);
@@ -96,8 +90,7 @@ __device__ inline void addDet3x3Sens(const T s, const T A[], T Ad[])
   Ad[8] += s * (A[0] * A[4] - A[3] * A[1]);
 }
 
-template <typename T>
-__device__ inline void det3x32ndSens(const T s, const T A[], T Ad[])
+template <typename T> inline void det3x32ndSens(const T s, const T A[], T Ad[])
 {
   // Ad[0] = s*(A[8]*A[4] - A[7]*A[5]);
   Ad[0] = 0.0;
@@ -215,7 +208,7 @@ public:
   static const int spatial_dim = 3;
   static const int dof_per_node = 3;
 
-  static __device__ T energy(T weight, const T J[], const T grad[], const T C1, const T D1)
+  static T energy(T weight, const T J[], const T grad[], const T C1, const T D1)
   {
     // Compute the inverse and determinant of the Jacobian matrix
     T Jinv[spatial_dim * spatial_dim];
@@ -243,7 +236,7 @@ public:
     return weight * detJ * energy_density;
   }
 
-  static __device__ void residual(T weight, const T J[], const T grad[], T coef[], const T C1, const T D1)
+  static void residual(T weight, const T J[], const T grad[], T coef[], const T C1, const T D1)
   {
     // Compute the inverse and determinant of the Jacobian matrix
     T Jinv[spatial_dim * spatial_dim];
@@ -365,7 +358,7 @@ public:
     mat3x3MatTransMult(cphys, Jinv, coef);
   }
 
-  static __device__ void test_func()
+  static void test_func()
   {
     printf("Test func \n");
   }
