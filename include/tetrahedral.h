@@ -1,5 +1,52 @@
 #pragma once
 
+class TetrahedralQuadrature
+{
+public:
+  static const int num_quadrature_pts = 5;
+
+  template <typename T>
+  static T get_quadrature_pt(int k, T pt[])
+  {
+    if (k == 0)
+    {
+      pt[0] = 0.25;
+      pt[1] = 0.25;
+      pt[2] = 0.25;
+      return -2.0 / 15;
+    }
+    else if (k == 1)
+    {
+      pt[0] = 1.0 / 6.0;
+      pt[1] = 1.0 / 6.0;
+      pt[2] = 1.0 / 6.0;
+      return 3.0 / 40;
+    }
+    else if (k == 2)
+    {
+      pt[0] = 0.5;
+      pt[1] = 1.0 / 6.0;
+      pt[2] = 1.0 / 6.0;
+      return 3.0 / 40;
+    }
+    else if (k == 3)
+    {
+      pt[0] = 1.0 / 6.0;
+      pt[1] = 0.5;
+      pt[2] = 1.0 / 6.0;
+      return 3.0 / 40;
+    }
+    else if (k == 4)
+    {
+      pt[0] = 1.0 / 6.0;
+      pt[1] = 1.0 / 6.0;
+      pt[2] = 0.5;
+      return 3.0 / 40;
+    }
+    return 0.0;
+  }
+};
+
 class TetrahedralBasis
 {
 public:
@@ -7,7 +54,7 @@ public:
   static constexpr int nodes_per_element = 10;
 
   template <typename T>
-  static __device__ void eval_basis_grad(const T pt[], T Nxi[])
+  static void eval_basis_grad(const T pt[], T Nxi[])
   {
     // Corner node derivatives
     Nxi[0] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
@@ -50,7 +97,7 @@ public:
   }
 
   template <typename T, int dim>
-  static __device__ void eval_grad(const T pt[], const T dof[], T grad[])
+  static void eval_grad(const T pt[], const T dof[], T grad[])
   {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
@@ -74,7 +121,7 @@ public:
   }
 
   template <typename T, int dim>
-  static __device__ void add_grad(const T pt[], const T coef[], T res[])
+  static void add_grad(const T pt[], const T coef[], T res[])
   {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
@@ -89,51 +136,41 @@ public:
       }
     }
   }
-};
-
-class TetrahedralQuadrature
-{
-public:
-  static const int num_quadrature_pts = 5;
 
   template <typename T>
-  static __device__ T get_quadrature_pt(int k, T pt[])
+  static void eval_basis_PU(const T pt[], T N[])
   {
-    if (k == 0)
+    T L1 = 1.0 - pt[0] - pt[1] - pt[2];
+    T L2 = pt[0];
+    T L3 = pt[1];
+    T L4 = pt[2];
+    N[0] = L1 * L1;
+    N[1] = L2 * L2;
+    N[2] = L3 * L3;
+    N[3] = L4 * L4;
+    N[4] = 2 * L1 * L2;
+    N[5] = 2 * L1 * L3;
+    N[6] = 2 * L1 * L4;
+    N[7] = 2 * L2 * L3;
+    N[8] = 2 * L3 * L4;
+    N[9] = 2 * L2 * L4;
+  }
+
+  template <typename T>
+  static void element_mass_matrix(const T density)
+  {
+
+    for (int i = 0; i < nodes_per_element; i++)
     {
-      pt[0] = 0.25;
-      pt[1] = 0.25;
-      pt[2] = 0.25;
-      return -2.0 / 15;
+      T quadrature_sum = 0.0;
+      for (int k = 0; k < TetrahedralQuadrature::num_quadrature_pts; k++)
+      {
+        T pt[3];
+        T weight = TetrahedralQuadrature::get_quadrature_pt(k, pt);
+        T N[nodes_per_element];
+        eval_basis_PU(pt, N);
+        quadrature_sum += N[i] * weight;
+      }
     }
-    else if (k == 1)
-    {
-      pt[0] = 1.0 / 6.0;
-      pt[1] = 1.0 / 6.0;
-      pt[2] = 1.0 / 6.0;
-      return 3.0 / 40;
-    }
-    else if (k == 2)
-    {
-      pt[0] = 0.5;
-      pt[1] = 1.0 / 6.0;
-      pt[2] = 1.0 / 6.0;
-      return 3.0 / 40;
-    }
-    else if (k == 3)
-    {
-      pt[0] = 1.0 / 6.0;
-      pt[1] = 0.5;
-      pt[2] = 1.0 / 6.0;
-      return 3.0 / 40;
-    }
-    else if (k == 4)
-    {
-      pt[0] = 1.0 / 6.0;
-      pt[1] = 1.0 / 6.0;
-      pt[2] = 0.5;
-      return 3.0 / 40;
-    }
-    return 0.0;
   }
 };

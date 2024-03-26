@@ -93,6 +93,21 @@ public:
     reduced_dofs_size = new_size;
   }
 
+  void assemble_diagonal_mass_vector(T *mass_vector)
+  {
+    /*
+    Assemble the global mass matrix in diagonal form.
+    Steps
+    1. Calculate element mass matrix, diagonalize and lump to nodes.
+    2. Collect nodal mass mass matrix into a vector.
+    3. Return reduced mass matrix based on BC.
+    */
+
+    printf("Getting lumped mass \n");
+
+    T mass = 0.0;
+  }
+
   // void update_mesh(int new_num_elements, int new_num_nodes,
   //                  int* new_element_nodes, T* new_xloc) {
   //   num_elements = new_num_elements;
@@ -121,5 +136,7 @@ public:
     // This scheme is common among various commercial solvers,
     // and hence, preferrable.
     get_reduced_dofs();
+
+    // update nodal positions
   }
 };

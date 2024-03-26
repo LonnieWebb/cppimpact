@@ -8,6 +8,7 @@
 #include "include/dynamics.h"
 #include "include/elastoplastic.h"
 #include "include/wall.h"
+#include "include/matrix.h"
 
 int main(int argc, char *argv[])
 {
@@ -53,4 +54,18 @@ int main(int argc, char *argv[])
     Wall<T, dof_per_node, normal> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes);
 
     dyna.solve();
+
+    BandedMatrix<T, 5, 2> matrix;
+
+    // Set some values in the matrix
+    matrix.set(0, 0, 1);
+    matrix.set(1, 1, 2);
+    matrix.set(2, 2, 3);
+    matrix.set(3, 3, 4);
+    matrix.set(4, 4, 5);
+    matrix.set(1, 2, 1.5);
+
+    matrix.print();
+
+    return 0;
 }
