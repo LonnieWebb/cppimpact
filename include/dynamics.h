@@ -191,6 +191,9 @@ public:
 
       // update_node_positions();
       // assemble_diagonal_mass_vector();
+
+      // Initial Computation
+      
     }
 
     //------------------- End of Initialization -------------------

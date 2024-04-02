@@ -3,6 +3,7 @@
 #include "physics.h"
 #include "tetrahedral.h"
 #include <cuda_runtime.h>
+#include <cblas.h>
 
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis;
@@ -398,16 +399,83 @@ public:
       element_mass_matrix_diagonals[3 * i + 2] = m_i;
     }
   }
-};
 
-// explicit instantiation if needed
+  static void calculate_f_internal(T *element_xloc, T *element_dof, T *f_internal)
+  {
+    T pt[spatial_dim];
+    for (int i = 0; i < num_quadrature_pts; i++)
+    {
+      T weight = Quadrature::get_quadrature_pt<T>(i, pt);
+      // Evaluate the derivative of the spatial dof in the computational
+      // coordinates
+      T J[spatial_dim * spatial_dim];
+      Basis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
 
-// using T = double;
-// using Basis = TetrahedralBasis;
-// using Quadrature = TetrahedralQuadrature;
-// using Physics = NeohookeanPhysics<T>;
-// using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
-// const int nodes_per_element = Basis::nodes_per_element;
+      // Evaluate the derivative of the dof in the computational coordinates
+      T grad[dof_per_node * spatial_dim];
+      Basis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
 
-// template __global__ void energy_kernel<T, nodes_per_element>(const int *element_nodes,
-//                                                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1);
+      T coef[dof_per_node * spatial_dim];
+      // Compute the inverse and determinant of the Jacobian matrix
+      T Jinv[spatial_dim * spatial_dim];
+      T detJ = inv3x3(J, Jinv);
+
+      // Compute the deformation gradient F
+      T F[spatial_dim * spatial_dim];
+      mat3x3MatMult(grad, Jinv, F);
+      F[0] += 1.0;
+      F[4] += 1.0;
+      F[8] += 1.0;
+
+      T Finv[spatial_dim * spatial_dim];
+      T FinvT[spatial_dim * spatial_dim];
+      T Fdet = inv3x3(F, Finv);
+      transpose3x3(Finv, FinvT);
+
+      T J_neo = det3x3(F); // Compute determinant of F to get J
+      T lnJ = log(J);
+
+      T P[spatial_dim * spatial_dim];
+
+      // Compute P: First Piola-Kirchhoff stress tensor
+      for (int j = 0; j < 9; ++j)
+      {                                // For each component in the 3x3 matrix
+        P[j] = mu * (F[j] - FinvT[j]); // mu * (F - F^{-T})
+        if (j % 4 == 0)
+        {                                  // Diagonal components
+          P[j] += lambda * lnJ * FinvT[j]; // Add lambda * ln(J) * F^{-T} term
+        }
+      }
+
+      T B_matrix[6 * 3 * nodes_per_element];
+      Basis::B_matrix(pt, element_dof, grad, B_matrix, T * Jinv);
+
+      //   cblas_dgemm(CblasRowMajor,      // Matrix storage layout
+      //             CblasTrans,         // Transpose option for the first matrix: B^T
+      //             CblasNoTrans,       // No transpose option for the second matrix: P
+      //             3*nodes_per_element,             // Number of rows in the result matrix and B^T
+      //             P_cols,             // Number of columns in the result matrix and P
+      //             B_rows,             // Number of columns in B^T and rows in P
+      //             1.0,                // Scaling factor for the product of the matrices
+      //             B,                  // First matrix: B
+      //             B_rows,             // Leading dimension of B (number of rows in B before transpose)
+      //             P,                  // Second matrix: P
+      //             B_cols,             // Leading dimension of P (number of rows in P)
+      //             0.0,                // Scaling factor for any original values in the result matrix
+      //             BP,                 // Result matrix: B^T * P
+      //             B_cols);            // Leading dimension of the result matrix
+      // }
+    }
+  };
+
+  // explicit instantiation if needed
+
+  // using T = double;
+  // using Basis = TetrahedralBasis;
+  // using Quadrature = TetrahedralQuadrature;
+  // using Physics = NeohookeanPhysics<T>;
+  // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
+  // const int nodes_per_element = Basis::nodes_per_element;
+
+  // template __global__ void energy_kernel<T, nodes_per_element>(const int *element_nodes,
+  //                                                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1);
