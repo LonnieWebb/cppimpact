@@ -7,7 +7,7 @@
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis;
 using T = double;
-using Basis = TetrahedralBasis;
+using Basis = TetrahedralBasis<T>;
 using Quadrature = TetrahedralQuadrature;
 using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -45,11 +45,11 @@ __global__ void energy_kernel(const int *element_nodes,
   // Evaluate the derivative of the spatial dof in the computational
   // coordinates
   T J[spatial_dim * spatial_dim];
-  TetrahedralBasis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
+  Basis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
 
   // Evaluate the derivative of the dof in the computational coordinates
   T grad[spatial_dim * spatial_dim];
-  TetrahedralBasis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
+  Basis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
   // Add the energy contributions
   __syncthreads();
   atomicAdd(&elem_energy, Physics::energy(weight, J, grad, *C1, *D1));
@@ -103,11 +103,11 @@ __global__ void residual_kernel(int element_nodes[], const T xloc[], const T dof
   // Evaluate the derivative of the spatial dof in the computational
   // coordinates
   T J[spatial_dim * spatial_dim];
-  TetrahedralBasis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
+  Basis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
 
   // Evaluate the derivative of the dof in the computational coordinates
   T grad[dof_per_node * spatial_dim];
-  TetrahedralBasis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
+  Basis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
 
   // Evaluate the residuals at the quadrature points
   T coef[dof_per_node * spatial_dim];
@@ -115,7 +115,7 @@ __global__ void residual_kernel(int element_nodes[], const T xloc[], const T dof
   __syncthreads();
 
   // Add the contributions to the element residual
-  TetrahedralBasis::add_grad<T, dof_per_node>(pt, coef, element_res);
+  Basis::add_grad<T, dof_per_node>(pt, coef, element_res);
 
   __syncthreads();
   if (threadIdx.x == 0)
@@ -143,9 +143,10 @@ public:
   static constexpr int dof_per_element = dof_per_node * nodes_per_element;
 
   template <int ndof>
-  static __device__ void get_element_dof(const int nodes[], const T dof[],
-                                         T element_dof[])
+  static void get_element_dof(const int nodes[], const T dof[],
+                              T element_dof[])
   {
+    printf("Element Mass Matrix calc \n");
     for (int j = 0; j < nodes_per_element; j++)
     {
       int node = nodes[j];
@@ -157,8 +158,8 @@ public:
   }
 
   template <int ndof>
-  __device__ static void add_element_res(const int nodes[], const T element_res[],
-                                         T *res)
+  static void add_element_res(const int nodes[], const T element_res[],
+                              T *res)
   {
     for (int j = 0; j < nodes_per_element; j++)
     {
@@ -354,6 +355,47 @@ public:
 
       add_element_res<dof_per_node>(&element_nodes[nodes_per_element * i],
                                     element_res, res);
+    }
+  }
+
+  static void element_mass_matrix(const T element_density, const T *element_xloc, const T *element_dof, T *element_mass_matrix_diagonals, int element_index)
+  {
+    for (int i = 0; i < nodes_per_element; i++)
+    {
+      T m_i = 0.0;
+      for (int k = 0; k < num_quadrature_pts; k++)
+      {
+        T pt[spatial_dim];
+        T weight = Quadrature::get_quadrature_pt(k, pt);
+        // Evaluate the derivative of the spatial dof in the computational
+        // coordinates
+        T J[spatial_dim * spatial_dim];
+        Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
+
+        // Evaluate the derivative of the dof in the computational coordinates
+        T grad[spatial_dim * spatial_dim];
+        Basis::template eval_grad<dof_per_node>(pt, element_dof, grad);
+
+        // Compute the inverse and determinant of the Jacobian matrix
+        T Jinv[spatial_dim * spatial_dim];
+        T detJ = inv3x3(J, Jinv);
+
+        // Compute the derformation gradient
+        T F[spatial_dim * spatial_dim];
+        mat3x3MatMult(grad, Jinv, F);
+        F[0] += 1.0;
+        F[4] += 1.0;
+        F[8] += 1.0;
+
+        // Compute the invariants
+        T detF = det3x3(F);
+        T N[nodes_per_element];
+        Basis::eval_basis_PU(pt, N);
+        m_i += N[i] * weight * detJ * element_density;
+      }
+      element_mass_matrix_diagonals[3 * i] = m_i;
+      element_mass_matrix_diagonals[3 * i + 1] = m_i;
+      element_mass_matrix_diagonals[3 * i + 2] = m_i;
     }
   }
 };

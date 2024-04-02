@@ -47,13 +47,13 @@ public:
   }
 };
 
+template <typename T>
 class TetrahedralBasis
 {
 public:
-  static const int spatial_dim = 3;
+  static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = 10;
 
-  template <typename T>
   static void eval_basis_grad(const T pt[], T Nxi[])
   {
     // Corner node derivatives
@@ -96,7 +96,7 @@ public:
     Nxi[29] = 4.0 * pt[1];
   }
 
-  template <typename T, int dim>
+  template <int dim>
   static void eval_grad(const T pt[], const T dof[], T grad[])
   {
     T Nxi[spatial_dim * nodes_per_element];
@@ -120,7 +120,7 @@ public:
     }
   }
 
-  template <typename T, int dim>
+  template <int dim>
   static void add_grad(const T pt[], const T coef[], T res[])
   {
     T Nxi[spatial_dim * nodes_per_element];
@@ -137,7 +137,6 @@ public:
     }
   }
 
-  template <typename T>
   static void eval_basis_PU(const T pt[], T N[])
   {
     T L1 = 1.0 - pt[0] - pt[1] - pt[2];
@@ -154,54 +153,5 @@ public:
     N[7] = 2 * L2 * L3;
     N[8] = 2 * L3 * L4;
     N[9] = 2 * L2 * L4;
-  }
-
-  template <typename T>
-  static void element_mass_matrix(const T element_density, const T *xloc, const T *dof, T *element_mass_matrix_diagonals, int element_index)
-  {
-    const int dof_per_element = dof_per_node * nodes_per_element;
-    T element_xloc[dof_per_element];
-    T element_dof[dof_per_element];
-    Analysis::get_element_dof<spatial_dim>(&element_nodes[nodes_per_element * element_index], xloc, element_xloc);
-    // Get the element degrees of freedom
-    Analysis::get_element_dof<spatial_dim>(&element_nodes[nodes_per_element * element_index], dof, element_dof);
-
-    for (int i = 0; i < nodes_per_element; i++)
-    {
-      T m_i = 0.0;
-      for (int k = 0; k < num_quadrature_pts; k++)
-      {
-        T pt[spatial_dim];
-        T weight = get_quadrature_pt<T>(k, pt);
-        // Evaluate the derivative of the spatial dof in the computational
-        // coordinates
-        T J[spatial_dim * spatial_dim];
-        eval_grad<T, spatial_dim>(pt, element_xloc, J);
-
-        // Evaluate the derivative of the dof in the computational coordinates
-        T grad[spatial_dim * spatial_dim];
-        eval_grad<T, dof_per_node>(pt, element_dof, grad);
-
-        // Compute the inverse and determinant of the Jacobian matrix
-        T Jinv[spatial_dim * spatial_dim];
-        T detJ = inv3x3(J, Jinv);
-
-        // Compute the derformation gradient
-        T F[spatial_dim * spatial_dim];
-        mat3x3MatMult(grad, Jinv, F);
-        F[0] += 1.0;
-        F[4] += 1.0;
-        F[8] += 1.0;
-
-        // Compute the invariants
-        T detF = det3x3(F);
-        T N[nodes_per_element];
-        eval_basis_PU(pt, N);
-        m_i += N[i] * weight * detJ * element_density;
-      }
-    }
-    element_mass_matrix_diagonals[i] = m_i;
-    element_mass_matrix_diagonals[i + 1] = m_i;
-    element_mass_matrix_diagonals[i + 2] = m_i;
   }
 };

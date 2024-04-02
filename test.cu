@@ -8,12 +8,11 @@
 #include "include/dynamics.h"
 #include "include/elastoplastic.h"
 #include "include/wall.h"
-#include "include/matrix.h"
 
 int main(int argc, char *argv[])
 {
     using T = double;
-    using Basis = TetrahedralBasis;
+    using Basis = TetrahedralBasis<T>;
     using Quadrature = TetrahedralQuadrature;
     using Physics = NeohookeanPhysics<T>;
     using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -39,7 +38,7 @@ int main(int argc, char *argv[])
 
     // Set the number of degrees of freedom
 
-    Dynamics<T, dof_per_node> dyna(&tensile, &material);
+    Dynamics<T, Basis, Analysis> dyna(&tensile, &material);
 
     // Position and velocity in x, y, z
     T init_position[] = {0.0, 1.0, 0.0};
@@ -50,22 +49,11 @@ int main(int argc, char *argv[])
     const int normal = -1;
     std::string wall_name = "Wall";
     T location = 3.0;
+    double dt = 0.0012;
 
     Wall<T, dof_per_node, normal> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes);
 
-    dyna.solve();
-
-    BandedMatrix<T, 5, 2> matrix;
-
-    // Set some values in the matrix
-    matrix.set(0, 0, 1);
-    matrix.set(1, 1, 2);
-    matrix.set(2, 2, 3);
-    matrix.set(3, 3, 4);
-    matrix.set(4, 4, 5);
-    matrix.set(1, 2, 1.5);
-
-    matrix.print();
+    dyna.solve(dt);
 
     return 0;
 }

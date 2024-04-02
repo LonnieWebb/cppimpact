@@ -5,24 +5,28 @@
 #include "mesh.h"
 #include "basematerial.h"
 
-template <typename T, int dof_per_node>
+template <typename T, class Basis, class Analysis>
 class Dynamics
 {
 public:
   Mesh<T> *mesh;
-  BaseMaterial<T, dof_per_node> *material;
-  int *reduced_dofs;
+
+  int *reduced_nodes;
   int reduced_dofs_size;
   int ndof;
+  static constexpr int nodes_per_element = Basis::nodes_per_element;
+  static constexpr int spatial_dim = Basis::spatial_dim;
+  static constexpr int dof_per_node = spatial_dim;
+  BaseMaterial<T, dof_per_node> *material;
 
   T *vel;
 
   Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material)
-      : mesh(input_mesh), material(input_material), reduced_dofs(nullptr), reduced_dofs_size(0), vel(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
+      : mesh(input_mesh), material(input_material), reduced_nodes(nullptr), reduced_dofs_size(0), vel(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
 
   ~Dynamics()
   {
-    delete[] reduced_dofs;
+    delete[] reduced_nodes;
     delete[] vel;
   }
 
@@ -52,45 +56,36 @@ public:
     }
   }
 
-  void get_reduced_dofs()
+  // This function is used to get the reduced degrees of freedom (DOFs) of the system.
+  // It first initializes the reduced DOFs to be all DOFs, then removes the fixed DOFs.
+  void get_reduced_nodes()
   {
-    int size = mesh->num_nodes * dof_per_node;
-    delete[] reduced_dofs; // Safe deletion in case it was already allocated
-    reduced_dofs = new int[size];
-    reduced_dofs_size = size;
+    // Safe deletion in case it was already allocated
+    delete[] reduced_nodes;
 
-    for (int i = 0; i < mesh->num_nodes * dof_per_node; i++)
+    // Allocate memory for reduced DOFs
+    reduced_nodes = new int[mesh->num_nodes];
+
+    for (int i = 0; i < mesh->num_nodes; i++)
     {
-      reduced_dofs[i] = i;
+      reduced_nodes[i] = mesh->element_nodes[i];
     }
 
-    int global_dof_idx[dof_per_node];
+    // Loop over all fixed nodes
     for (int i = 0; i < mesh->num_fixed_nodes; i++)
     {
-      int fixed_node_idx = mesh->fixed_nodes[i];
+      // Get the value of the fixed node
+      int fixed_node_value = mesh->fixed_nodes[i];
 
-      get_node_global_dofs(fixed_node_idx, global_dof_idx);
-      for (int j = 0; j < dof_per_node; j++)
+      // Loop over reduced_nodes and mark matching nodes as -1
+      for (int j = 0; j < mesh->num_nodes; j++)
       {
-        int dof_idx = global_dof_idx[j];
-        reduced_dofs[dof_idx] = -1;
+        if (reduced_nodes[j] == fixed_node_value)
+        {
+          reduced_nodes[j] = -1; // Mark this node as fixed
+        }
       }
     }
-
-    int new_size = dof_per_node * (mesh->num_nodes - mesh->num_fixed_nodes);
-    int *new_reduced_dofs = new int[new_size];
-
-    int index = 0;
-    for (int i = 0; i < size; i++)
-    {
-      if (reduced_dofs[i] != -1)
-      {
-        new_reduced_dofs[index++] = reduced_dofs[i];
-      }
-    }
-    delete[] reduced_dofs;
-    reduced_dofs = new_reduced_dofs;
-    reduced_dofs_size = new_size;
   }
 
   void assemble_diagonal_mass_vector(T *mass_vector)
@@ -116,7 +111,7 @@ public:
   //   xloc = new_xloc;
   // }
 
-  void solve()
+  void solve(double dt)
   {
     // Perform a dynamic analysis. The algorithm is staggered as follows:
     // This assumes that the initial u, v, a and fext are already initialized
@@ -135,8 +130,70 @@ public:
 
     // This scheme is common among various commercial solvers,
     // and hence, preferrable.
-    get_reduced_dofs();
 
-    // update nodal positions
+    // ------------------- Initialization -------------------
+    constexpr int dof_per_element = nodes_per_element * spatial_dim;
+    printf("Solving dynamics\n");
+
+    // Test matrix
+    const T element_density = material->rho_density;
+    T dof[ndof];
+    for (int i = 0; i < ndof; i++)
+    {
+      dof[i] = 0.01 * rand() / RAND_MAX;
+    }
+
+    int *element_nodes = mesh->element_nodes;
+    T *xloc = mesh->xloc;
+
+    T element_mass_matrix_diagonals[dof_per_element];
+    T element_xloc[dof_per_element];
+    T element_dof[dof_per_element];
+    T element_forces[dof_per_element];
+    T element_vel[dof_per_element];
+    T element_acc[dof_per_element];
+    int *this_element_nodes;
+    double time = 0.0;
+    // T element_density;
+
+    for (int k = 0; k < dof_per_element; k++)
+    {
+      element_mass_matrix_diagonals[k] = 0.0;
+      element_xloc[k] = 0.0;
+      element_dof[k] = 0.0;
+      element_forces[k] = 0.0;
+      element_acc[k] = 0.0;
+    }
+
+    // Loop over all elements
+    for (int i = 0; i < mesh->num_elements; i++)
+    {
+      // element_density = element_densities[i];
+
+      this_element_nodes = &element_nodes[nodes_per_element * i];
+
+      // Get the element locations
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, xloc, element_xloc);
+      // Get the element degrees of freedom
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, dof, element_dof);
+      // Get the element velocities
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel, element_vel);
+
+      Analysis::element_mass_matrix(element_density, element_xloc, element_dof, element_mass_matrix_diagonals, i);
+
+      T Mr_inv[dof_per_element];
+      for (int k = 0; k < dof_per_element; k++)
+      {
+        Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
+      }
+
+      // get_reduced_dofs(); // Reduced Dofs currently not implemented
+
+      // update_node_positions();
+      // assemble_diagonal_mass_vector();
+    }
+
+    //------------------- End of Initialization -------------------
+    // ------------------- Start of Time Loop -------------------
   }
 };
