@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-template <typename T, int dim, int normal>
+template <typename T, int dim, int normal, class Basis>
 class Wall
 {
 public:
@@ -32,16 +32,23 @@ public:
 
   ~Wall() {}
 
-  void detect_contact(T *xloc, T *contact_forces)
+  void detect_contact(T *element_xloc, T *this_element_nodes, T *contact_forces)
   {
-    for (int i = 0; i < num_slave_nodes; i++)
+    for (size_t i = 0; i < Basis::nodes_per_element; i++)
     {
-      T wall_distance = (xloc[3 * i + dim] - location) * normal;
-      if (wall_distance < 1e-5)
+      for (int j = 0; j < num_slave_nodes; j++)
       {
-        printf("Contact detected at node %i with penetration %f",
-               slave_node_indices[i], wall_distance);
-        contact_forces[i] += -stiffness * wall_distance * normal;
+        if (this_element_nodes[i] == slave_node_indices[j])
+        {
+
+          T wall_distance = (element_xloc[3 * j + dim] - location) * normal;
+          if (wall_distance < 1e-5)
+          {
+            printf("Contact detected at node %j with penetration %f",
+                   slave_node_indices[j], wall_distance);
+            contact_forces[3 * i + dim] += -stiffness * wall_distance * normal;
+          }
+        }
       }
     }
   }

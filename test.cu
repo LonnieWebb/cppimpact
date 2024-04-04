@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     T location = 3.0;
     double dt = 0.0012;
 
-    Wall<T, dof_per_node, normal> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes);
+    Wall<T, dof_per_node, normal, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes);
 
     dyna.solve(dt);
 

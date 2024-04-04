@@ -136,7 +136,7 @@ public:
     printf("Solving dynamics\n");
 
     // Test matrix
-    const T element_density = material->rho_density;
+    const T element_density = material->rho;
     T dof[ndof];
     for (int i = 0; i < ndof; i++)
     {
@@ -152,6 +152,7 @@ public:
     T element_forces[dof_per_element];
     T element_vel[dof_per_element];
     T element_acc[dof_per_element];
+    T element_internal_forces[dof_per_element];
     int *this_element_nodes;
     double time = 0.0;
     // T element_density;
@@ -163,6 +164,7 @@ public:
       element_dof[k] = 0.0;
       element_forces[k] = 0.0;
       element_acc[k] = 0.0;
+      element_internal_forces[k] = 0.0;
     }
 
     // Loop over all elements
@@ -186,6 +188,10 @@ public:
       {
         Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
       }
+      // Initialize f_internal to zero
+      memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+
+      Analysis::calculate_f_internal(element_xloc, element_dof, element_internal_forces, material);
 
       // get_reduced_dofs(); // Reduced Dofs currently not implemented
 
@@ -193,7 +199,6 @@ public:
       // assemble_diagonal_mass_vector();
 
       // Initial Computation
-      
     }
 
     //------------------- End of Initialization -------------------

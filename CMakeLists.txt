@@ -22,6 +22,11 @@ set_target_properties(test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 # Find CUDA Toolkit
 find_package(CUDAToolkit REQUIRED)
+# Find LAPACK/BLAS
+find_package(LAPACK REQUIRED)
+
+# Link LAPACK/BLAS libraries
+target_link_libraries(test ${LAPACK_LIBRARIES})
 
 # Link CUDA Toolkit libraries (if needed)
 target_link_libraries(test CUDA::cudart)

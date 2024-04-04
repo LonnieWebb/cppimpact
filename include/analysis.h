@@ -3,6 +3,7 @@
 #include "physics.h"
 #include "tetrahedral.h"
 #include <cuda_runtime.h>
+#include "basematerial.h"
 #include <cblas.h>
 
 template <typename T, class Basis, class Quadrature, class Physics>
@@ -12,6 +13,33 @@ using Basis = TetrahedralBasis<T>;
 using Quadrature = TetrahedralQuadrature;
 using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
+
+void extract_B_node_block(const T *B, T *B_node, int node, int num_nodes)
+{
+  for (int i = 0; i < 6; ++i)
+  { // 6 rows for strain components
+    for (int j = 0; j < 3; ++j)
+    { // 3 columns for each node's x, y, z displacement derivatives
+      B_node[i * 3 + j] = B[i * (3 * num_nodes) + (3 * node + j)];
+    }
+  }
+}
+
+void multiply_BT_node_P(const T *B_node, const T *P, T *BP_node)
+{
+  for (int i = 0; i < 3; ++i)
+  { // Iterate over rows of B^T (and resulting matrix)
+    for (int j = 0; j < 3; ++j)
+    {                         // Iterate over columns of P (and resulting matrix)
+      BP_node[i * 3 + j] = 0; // Initialize the element to 0
+      for (int k = 0; k < 6; ++k)
+      { // Iterate over columns of B^T (rows of B_node)
+        // Accumulate the product
+        BP_node[i * 3 + j] += B_node[k * 3 + i] * P[k * 3 + j];
+      }
+    }
+  }
+}
 
 template <typename T, const int nodes_per_element, const int dof_per_node, const int spatial_dim>
 __global__ void energy_kernel(const int *element_nodes,
@@ -134,7 +162,7 @@ public:
   static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = Basis::nodes_per_element;
 
-  // Static data from the qaudrature
+  // Static data from the quadrature
   static constexpr int num_quadrature_pts = Quadrature::num_quadrature_pts;
 
   // Static data taken from the physics
@@ -147,7 +175,6 @@ public:
   static void get_element_dof(const int nodes[], const T dof[],
                               T element_dof[])
   {
-    printf("Element Mass Matrix calc \n");
     for (int j = 0; j < nodes_per_element; j++)
     {
       int node = nodes[j];
@@ -400,20 +427,20 @@ public:
     }
   }
 
-  static void calculate_f_internal(T *element_xloc, T *element_dof, T *f_internal)
+  static void calculate_f_internal(const T *element_xloc, const T *element_dof, T *f_internal, BaseMaterial<T, dof_per_node> *material)
   {
     T pt[spatial_dim];
     for (int i = 0; i < num_quadrature_pts; i++)
     {
-      T weight = Quadrature::get_quadrature_pt<T>(i, pt);
+      T weight = Quadrature::template get_quadrature_pt<T>(i, pt);
       // Evaluate the derivative of the spatial dof in the computational
       // coordinates
       T J[spatial_dim * spatial_dim];
-      Basis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
+      Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
       // Evaluate the derivative of the dof in the computational coordinates
       T grad[dof_per_node * spatial_dim];
-      Basis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
+      Basis::template eval_grad<dof_per_node>(pt, element_dof, grad);
 
       T coef[dof_per_node * spatial_dim];
       // Compute the inverse and determinant of the Jacobian matrix
@@ -433,9 +460,12 @@ public:
       transpose3x3(Finv, FinvT);
 
       T J_neo = det3x3(F); // Compute determinant of F to get J
-      T lnJ = log(J);
+      T lnJ = std::log(detJ);
 
       T P[spatial_dim * spatial_dim];
+
+      T mu = material->E / (2 * (1 + material->nu));
+      T lambda = material->E * material->nu / ((1 + material->nu) * (1 - 2 * material->nu));
 
       // Compute P: First Piola-Kirchhoff stress tensor
       for (int j = 0; j < 9; ++j)
@@ -448,34 +478,45 @@ public:
       }
 
       T B_matrix[6 * 3 * nodes_per_element];
-      Basis::B_matrix(pt, element_dof, grad, B_matrix, T * Jinv);
+      Basis::B_matrix(Jinv, grad, B_matrix);
 
-      //   cblas_dgemm(CblasRowMajor,      // Matrix storage layout
-      //             CblasTrans,         // Transpose option for the first matrix: B^T
-      //             CblasNoTrans,       // No transpose option for the second matrix: P
-      //             3*nodes_per_element,             // Number of rows in the result matrix and B^T
-      //             P_cols,             // Number of columns in the result matrix and P
-      //             B_rows,             // Number of columns in B^T and rows in P
-      //             1.0,                // Scaling factor for the product of the matrices
-      //             B,                  // First matrix: B
-      //             B_rows,             // Leading dimension of B (number of rows in B before transpose)
-      //             P,                  // Second matrix: P
-      //             B_cols,             // Leading dimension of P (number of rows in P)
-      //             0.0,                // Scaling factor for any original values in the result matrix
-      //             BP,                 // Result matrix: B^T * P
-      //             B_cols);            // Leading dimension of the result matrix
-      // }
+      T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single node
+      T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a single node
+
+      for (int node = 0; node < nodes_per_element; ++node)
+      {
+        // Extract the 6x3 block for this node from B
+        extract_B_node_block(B_matrix, B_node, node, nodes_per_element);
+
+        // Perform the multiplication B_node^T * P
+        // Note: You might need to write a custom function for this or use loops, given the special structure
+        multiply_BT_node_P(B_node, P, BP_node);
+
+        // Accumulate the result into f_internal for this node
+        for (int j = 0; j < 3; ++j)
+        {
+          for (int k = 0; k < 3; ++k)
+          {
+            f_internal[node * 3 + j] += BP_node[j * 3 + k] * weight * detJ; // Consider the quadrature weight and detJ
+          }
+        }
+      }
     }
-  };
+    for (int i = 0; i < 3 * nodes_per_element; ++i)
+    {
+      printf("f_internal[%d] = %f\n", i, f_internal[i]);
+    }
+  }
+};
 
-  // explicit instantiation if needed
+// explicit instantiation if needed
 
-  // using T = double;
-  // using Basis = TetrahedralBasis;
-  // using Quadrature = TetrahedralQuadrature;
-  // using Physics = NeohookeanPhysics<T>;
-  // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
-  // const int nodes_per_element = Basis::nodes_per_element;
+// using T = double;
+// using Basis = TetrahedralBasis;
+// using Quadrature = TetrahedralQuadrature;
+// using Physics = NeohookeanPhysics<T>;
+// using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
+// const int nodes_per_element = Basis::nodes_per_element;
 
-  // template __global__ void energy_kernel<T, nodes_per_element>(const int *element_nodes,
-  //                                                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1);
+// template __global__ void energy_kernel<T, nodes_per_element>(const int *element_nodes,
+//                                                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1);
