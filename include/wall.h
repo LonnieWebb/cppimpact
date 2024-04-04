@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-template <typename T, int dim, int normal, class Basis>
+template <typename T, int dim, class Basis>
 class Wall
 {
 public:
@@ -14,15 +14,17 @@ public:
   T stiffness;
   int *slave_node_indices;
   int num_slave_nodes;
-  static_assert(normal == 1 || normal == -1, "Normal must be either 1 or -1.");
+  int normal;
+  // static_assert(normal == 1 || normal == -1, "Normal must be either 1 or -1.");
 
   Wall(std::string name, T location, T stiffness, int *slave_node_indices,
-       int num_slave_nodes)
+       int num_slave_nodes, int normal)
       : name(name),
         location(location),
         stiffness(stiffness),
         slave_node_indices(slave_node_indices),
-        num_slave_nodes(num_slave_nodes)
+        num_slave_nodes(num_slave_nodes),
+        normal(normal)
   {
     // for (int i = 0; i < num_slave_nodes; i++) {
     //   std::cout << "slave_node_indices[i]: " << slave_node_indices[i]
@@ -41,10 +43,10 @@ public:
         if (this_element_nodes[i] == slave_node_indices[j])
         {
 
-          T wall_distance = (element_xloc[3 * j + dim] - location) * normal;
+          T wall_distance = (element_xloc[3 * i + dim] - location) * normal;
           if (wall_distance < 1e-5)
           {
-            printf("Contact detected at node %j with penetration %f",
+            printf("Contact detected at node %i with penetration %f",
                    slave_node_indices[j], wall_distance);
             contact_forces[3 * i + dim] += -stiffness * wall_distance * normal;
           }

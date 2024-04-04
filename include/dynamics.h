@@ -4,6 +4,7 @@
 
 #include "mesh.h"
 #include "basematerial.h"
+#include "wall.h"
 
 template <typename T, class Basis, class Analysis>
 class Dynamics
@@ -18,11 +19,12 @@ public:
   static constexpr int spatial_dim = Basis::spatial_dim;
   static constexpr int dof_per_node = spatial_dim;
   BaseMaterial<T, dof_per_node> *material;
+  Wall<T, dof_per_node, Basis> *wall;
 
   T *vel;
 
-  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material)
-      : mesh(input_mesh), material(input_material), reduced_nodes(nullptr), reduced_dofs_size(0), vel(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
+  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material, Wall<T, dof_per_node, Basis> *input_wall = nullptr)
+      : mesh(input_mesh), material(input_material), wall(input_wall), reduced_nodes(nullptr), reduced_dofs_size(0), vel(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
 
   ~Dynamics()
   {
@@ -140,7 +142,7 @@ public:
     T dof[ndof];
     for (int i = 0; i < ndof; i++)
     {
-      dof[i] = 0.01 * rand() / RAND_MAX;
+      dof[i] = 0.001 * rand() / RAND_MAX;
     }
 
     int *element_nodes = mesh->element_nodes;
@@ -153,6 +155,8 @@ public:
     T element_vel[dof_per_element];
     T element_acc[dof_per_element];
     T element_internal_forces[dof_per_element];
+    T element_contact_forces[dof_per_element];
+    T element_Vr_i_plus_half[dof_per_element];
     int *this_element_nodes;
     double time = 0.0;
     // T element_density;
@@ -165,6 +169,8 @@ public:
       element_forces[k] = 0.0;
       element_acc[k] = 0.0;
       element_internal_forces[k] = 0.0;
+      element_contact_forces[k] = 0.0;
+      element_Vr_i_plus_half[k] = 0.0;
     }
 
     // Loop over all elements
@@ -184,21 +190,32 @@ public:
       Analysis::element_mass_matrix(element_density, element_xloc, element_dof, element_mass_matrix_diagonals, i);
 
       T Mr_inv[dof_per_element];
+      int gravity_dim = 2; // placeholder gravity force
       for (int k = 0; k < dof_per_element; k++)
       {
         Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
       }
+
+      for (int k = 0; k < nodes_per_element; k++)
+      {
+        element_forces[3 * k + gravity_dim] = -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
+      }
+
       // Initialize f_internal to zero
       memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
       Analysis::calculate_f_internal(element_xloc, element_dof, element_internal_forces, material);
-
-      // get_reduced_dofs(); // Reduced Dofs currently not implemented
-
-      // update_node_positions();
-      // assemble_diagonal_mass_vector();
+      wall->detect_contact(element_xloc, element_dof, element_contact_forces);
 
       // Initial Computation
+      for (int j = 0; j < dof_per_element; j++)
+      {
+        element_acc[j] = Mr_inv[j] * (element_forces[j] + element_contact_forces[j] - element_internal_forces[j]);
+        element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt / element_acc[j];
+        element_xloc[j] = element_xloc[j] + dt * element_Vr_i_plus_half[j];
+      }
+
+      // get_reduced_dofs(); // Reduced Dofs currently not implemented
     }
 
     //------------------- End of Initialization -------------------
