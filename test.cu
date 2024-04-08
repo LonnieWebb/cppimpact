@@ -46,13 +46,14 @@ int main(int argc, char *argv[])
     std::string wall_name = "Wall";
     T location = 3.0;
     double dt = 0.0012;
+    double time_end = 0.01;
 
     Wall<T, dof_per_node, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes, normal);
 
     Dynamics<T, Basis, Analysis> dyna(&tensile, &material, &w);
     dyna.initialize(init_position, init_velocity);
 
-    dyna.solve(dt);
+    dyna.solve(dt, time_end);
 
     return 0;
 }

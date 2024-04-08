@@ -442,7 +442,6 @@ public:
       T grad[dof_per_node * spatial_dim];
       Basis::template eval_grad<dof_per_node>(pt, element_dof, grad);
 
-      T coef[dof_per_node * spatial_dim];
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
@@ -501,10 +500,6 @@ public:
           }
         }
       }
-    }
-    for (int i = 0; i < 3 * nodes_per_element; ++i)
-    {
-      printf("f_internal[%d] = %f\n", i, f_internal[i]);
     }
   }
 };

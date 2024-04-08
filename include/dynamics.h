@@ -2,8 +2,8 @@
 #include <iostream>
 #include <numeric>
 
-#include "mesh.h"
 #include "basematerial.h"
+#include "mesh.h"
 #include "wall.h"
 
 template <typename T, class Basis, class Analysis>
@@ -23,8 +23,17 @@ public:
 
   T *vel;
 
-  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material, Wall<T, dof_per_node, Basis> *input_wall = nullptr)
-      : mesh(input_mesh), material(input_material), wall(input_wall), reduced_nodes(nullptr), reduced_dofs_size(0), vel(nullptr) { ndof = mesh->num_nodes * dof_per_node; }
+  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material,
+           Wall<T, dof_per_node, Basis> *input_wall = nullptr)
+      : mesh(input_mesh),
+        material(input_material),
+        wall(input_wall),
+        reduced_nodes(nullptr),
+        reduced_dofs_size(0),
+        vel(nullptr)
+  {
+    ndof = mesh->num_nodes * dof_per_node;
+  }
 
   ~Dynamics()
   {
@@ -32,10 +41,11 @@ public:
     delete[] vel;
   }
 
-  // Initialize the body. Move the mesh origin to init_position and give all nodes init_velocity.
-  void initialize(T init_position[dof_per_node], T init_velocity[dof_per_node])
+  // Initialize the body. Move the mesh origin to init_position and give all
+  // nodes init_velocity.
+  void initialize(T init_position[dof_per_node],
+                  T init_velocity[dof_per_node])
   {
-
     std::cout << "ndof: " << ndof << std::endl;
     vel = new T[ndof];
     for (int i = 0; i < mesh->num_nodes; i++)
@@ -50,6 +60,19 @@ public:
     }
   }
 
+  void add_element_vec(const int nodes[], const T element_vec[],
+                       T global_vec[])
+  {
+    for (int j = 0; j < nodes_per_element; j++)
+    {
+      int node = nodes[j];
+      for (int k = 0; k < dof_per_node; k++, element_vec++)
+      {
+        global_vec[dof_per_node * node + k] += element_vec[0];
+      }
+    }
+  }
+
   void get_node_global_dofs(const int node_idx, int *global_dof_idx)
   {
     for (int i = 0; i < dof_per_node; i++)
@@ -58,8 +81,9 @@ public:
     }
   }
 
-  // This function is used to get the reduced degrees of freedom (DOFs) of the system.
-  // It first initializes the reduced DOFs to be all DOFs, then removes the fixed DOFs.
+  // This function is used to get the reduced degrees of freedom (DOFs) of the
+  // system. It first initializes the reduced DOFs to be all DOFs, then removes
+  // the fixed DOFs.
   void get_reduced_nodes()
   {
     // Safe deletion in case it was already allocated
@@ -113,7 +137,7 @@ public:
   //   xloc = new_xloc;
   // }
 
-  void solve(double dt)
+  void solve(double dt, double time_end)
   {
     // Perform a dynamic analysis. The algorithm is staggered as follows:
     // This assumes that the initial u, v, a and fext are already initialized
@@ -137,16 +161,15 @@ public:
     constexpr int dof_per_element = nodes_per_element * spatial_dim;
     printf("Solving dynamics\n");
 
-    // Test matrix
     const T element_density = material->rho;
-    T dof[ndof];
+    T global_dof[ndof];
+    int *element_nodes = mesh->element_nodes;
+    T *global_xloc = mesh->xloc;
+
     for (int i = 0; i < ndof; i++)
     {
-      dof[i] = 0.001 * rand() / RAND_MAX;
+      global_dof[i] = 0.001 * rand() / RAND_MAX;
     }
-
-    int *element_nodes = mesh->element_nodes;
-    T *xloc = mesh->xloc;
 
     T element_mass_matrix_diagonals[dof_per_element];
     T element_xloc[dof_per_element];
@@ -157,7 +180,7 @@ public:
     T element_internal_forces[dof_per_element];
     T element_contact_forces[dof_per_element];
     T element_Vr_i_plus_half[dof_per_element];
-    int *this_element_nodes;
+    int this_element_nodes[nodes_per_element];
     double time = 0.0;
     // T element_density;
 
@@ -167,6 +190,7 @@ public:
       element_xloc[k] = 0.0;
       element_dof[k] = 0.0;
       element_forces[k] = 0.0;
+      element_vel[k] = 0.0;
       element_acc[k] = 0.0;
       element_internal_forces[k] = 0.0;
       element_contact_forces[k] = 0.0;
@@ -178,16 +202,23 @@ public:
     {
       // element_density = element_densities[i];
 
-      this_element_nodes = &element_nodes[nodes_per_element * i];
+      for (int j = 0; j < nodes_per_element; j++)
+      {
+        this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
+      }
 
       // Get the element locations
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, xloc, element_xloc);
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_xloc,
+                                                      element_xloc);
       // Get the element degrees of freedom
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, dof, element_dof);
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_dof,
+                                                      element_dof);
       // Get the element velocities
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel, element_vel);
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
+                                                      element_vel);
 
-      Analysis::element_mass_matrix(element_density, element_xloc, element_dof, element_mass_matrix_diagonals, i);
+      Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
+                                    element_mass_matrix_diagonals, i);
 
       T Mr_inv[dof_per_element];
       int gravity_dim = 2; // placeholder gravity force
@@ -198,27 +229,111 @@ public:
 
       for (int k = 0; k < nodes_per_element; k++)
       {
-        element_forces[3 * k + gravity_dim] = -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
+        element_forces[3 * k + gravity_dim] =
+            -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
       }
 
       // Initialize f_internal to zero
       memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
-      Analysis::calculate_f_internal(element_xloc, element_dof, element_internal_forces, material);
-      wall->detect_contact(element_xloc, element_dof, element_contact_forces);
+      Analysis::calculate_f_internal(element_xloc, element_dof,
+                                     element_internal_forces, material);
+
+      printf("Current Element: %d\n", i);
+
+      // wall->detect_contact(element_xloc, element_dof, element_contact_forces);
 
       // Initial Computation
-      for (int j = 0; j < dof_per_element; j++)
-      {
-        element_acc[j] = Mr_inv[j] * (element_forces[j] + element_contact_forces[j] - element_internal_forces[j]);
-        element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt / element_acc[j];
-        element_xloc[j] = element_xloc[j] + dt * element_Vr_i_plus_half[j];
-      }
+      // for (int j = 0; j < dof_per_element; j++)
+      // {
+      //   element_acc[j] =
+      //       Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
+      //                    element_internal_forces[j]);
+      //   element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt * element_acc[j];
+      //   element_dof[j] += dt * element_Vr_i_plus_half[j];
+      //   element_xloc[j] += element_dof[j];
+      // }
 
       // get_reduced_dofs(); // Reduced Dofs currently not implemented
+
+      for (int j = 0; j < dof_per_element; j++)
+      {
+        printf("element_internal_forces[%d]: %f\n", j, element_internal_forces[j]);
+      }
+
+      // // assemble global vectors
+      // add_element_vec(element_nodes, element_dof, global_dof);
+      // memset(global_xloc, 0, sizeof(T) * 3 * nodes_per_element);
+      // add_element_vec(element_nodes, element_xloc, global_xloc);
+      // add_element_vec(element_nodes, element_vel, vel);
     }
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
+    while (time <= time_end)
+    {
+      printf("Time: %f\n", time);
+      for (int i = 0; i < mesh->num_elements; i++)
+      {
+        for (int j = 0; j < nodes_per_element; j++)
+        {
+          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
+        }
+
+        // Get the element locations
+        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_xloc,
+                                                        element_xloc);
+        // Get the element degrees of freedom
+        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_dof,
+                                                        element_dof);
+        // Get the element velocities
+        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
+                                                        element_vel);
+
+        // might be able to avoid recaculating this
+        Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
+                                      element_mass_matrix_diagonals, i);
+
+        T Mr_inv[dof_per_element];
+        int gravity_dim = 2; // placeholder gravity force
+        for (int k = 0; k < dof_per_element; k++)
+        {
+          Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
+        }
+
+        for (int k = 0; k < nodes_per_element; k++)
+        {
+          element_forces[3 * k + gravity_dim] =
+              -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
+        }
+
+        // Initialize f_internal to zero
+        memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+
+        Analysis::calculate_f_internal(element_xloc, element_dof,
+                                       element_internal_forces, material);
+        wall->detect_contact(element_xloc, element_dof, element_contact_forces);
+
+        // Initial Computation
+        for (int j = 0; j < dof_per_element; j++)
+        {
+          element_acc[j] =
+              Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
+                           element_internal_forces[j]);
+          element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt * element_acc[j];
+          element_dof[j] += dt * element_Vr_i_plus_half[j];
+          element_xloc[j] += element_dof[j];
+        }
+
+        // get_reduced_dofs(); // Reduced Dofs currently not implemented
+
+        // assemble global vectors
+        add_element_vec(element_nodes, element_dof, global_dof);
+        memset(global_xloc, 0, sizeof(T) * 3 * nodes_per_element);
+        add_element_vec(element_nodes, element_xloc, global_xloc);
+        add_element_vec(element_nodes, element_vel, vel);
+      }
+      time += dt;
+    }
   }
 };
