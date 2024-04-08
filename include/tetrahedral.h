@@ -155,7 +155,7 @@ public:
     N[9] = 2 * L2 * L4;
   }
 
-  static void B_matrix(const T Jinv[], const T Nxi[], T B[])
+  static void calculate_B_matrix(const T Jinv[], const T Nxi[], T B[])
   {
     // Assuming Nxi is in element coordinates and has dimensions [spatial_dim * nodes_per_element]
     // B matrix should have dimensions [6 * (3*nodes_per_element)], flattened into 1D array

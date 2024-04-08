@@ -477,10 +477,25 @@ public:
       }
 
       T B_matrix[6 * 3 * nodes_per_element];
-      Basis::B_matrix(Jinv, grad, B_matrix);
+      for (int j = 0; j < 6 * 3 * nodes_per_element; ++j)
+      {
+        B_matrix[j] = 0.0;
+      }
+
+      Basis::calculate_B_matrix(Jinv, grad, B_matrix);
 
       T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single node
       T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a single node
+
+      // Initialize B_node and BP_node to -5.0
+      for (int j = 0; j < 18; ++j)
+      {
+        B_node[j] = 0.0;
+      }
+      for (int j = 0; j < 9; ++j)
+      {
+        BP_node[j] = 0.0;
+      }
 
       for (int node = 0; node < nodes_per_element; ++node)
       {
@@ -488,8 +503,11 @@ public:
         extract_B_node_block(B_matrix, B_node, node, nodes_per_element);
 
         // Perform the multiplication B_node^T * P
-        // Note: You might need to write a custom function for this or use loops, given the special structure
-        multiply_BT_node_P(B_node, P, BP_node);
+        cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                    3, 3, 6,
+                    1.0, B_node, 3,
+                    P, 3,
+                    0.0, BP_node, 3);
 
         // Accumulate the result into f_internal for this node
         for (int j = 0; j < 3; ++j)
