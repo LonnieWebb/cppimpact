@@ -1,6 +1,10 @@
 #pragma once
 #include <iostream>
 #include <numeric>
+#include <fstream>
+#include <iomanip>
+#include <cmath>
+#include <cfloat>
 
 #include "basematerial.h"
 #include "mesh.h"
@@ -58,6 +62,92 @@ public:
       mesh->xloc[3 * i + 1] = mesh->xloc[3 * i + 1] + init_position[1];
       mesh->xloc[3 * i + 2] = mesh->xloc[3 * i + 2] + init_position[2];
     }
+  }
+
+  void export_to_vtk(int timestep)
+  {
+    if (timestep % 2 != 0)
+      return;
+
+    const std::string directory = "../output";
+    const std::string filename = directory + "/simulation_" + std::to_string(timestep) + ".vtk";
+    std::ofstream vtkFile(filename);
+
+    if (!vtkFile.is_open())
+    {
+      std::cerr << "Failed to open " << filename << std::endl;
+      return;
+    }
+
+    vtkFile << "# vtk DataFile Version 3.0\n";
+    vtkFile << "FEA simulation data\n";
+    vtkFile << "ASCII\n";
+    vtkFile << "DATASET UNSTRUCTURED_GRID\n";
+    const double threshold = 1e6;
+
+    vtkFile << "POINTS " << mesh->num_nodes << " float\n";
+    for (int i = 0; i < mesh->num_nodes; ++i)
+    {
+      T x = mesh->xloc[3 * i];
+      T y = mesh->xloc[3 * i + 1];
+      T z = mesh->xloc[3 * i + 2];
+
+      // Check for NaN or extremely large values and set to 0 if found
+      if (std::isnan(x) || std::isinf(x) || std::abs(x) > threshold)
+      {
+        std::cerr << "Invalid value detected in x-coordinate at node " << i << ", setting to 0." << std::endl;
+        x = 0.0;
+      }
+      if (std::isnan(y) || std::isinf(y) || std::abs(y) > threshold)
+      {
+        std::cerr << "Invalid value detected in y-coordinate at node " << i << ", setting to 0." << std::endl;
+        y = 0.0;
+      }
+      if (std::isnan(z) || std::isinf(z) || std::abs(z) > threshold)
+      {
+        std::cerr << "Invalid value detected in z-coordinate at node " << i << ", setting to 0." << std::endl;
+        z = 0.0;
+      }
+
+      vtkFile << std::fixed << std::setprecision(6);
+      vtkFile << x << " " << y << " " << z << "\n";
+    }
+
+    vtkFile << "CELLS " << mesh->num_elements << " " << mesh->num_elements * (nodes_per_element + 1) << "\n";
+    for (int i = 0; i < mesh->num_elements; ++i)
+    {
+      vtkFile << nodes_per_element; // Number of points in this cell
+      for (int j = 0; j < nodes_per_element; ++j)
+      {
+        vtkFile << " " << mesh->element_nodes[nodes_per_element * i + j];
+      }
+      vtkFile << "\n"; // Ensure newline at the end of each cell's connectivity list
+    }
+
+    vtkFile << "CELL_TYPES " << mesh->num_elements << "\n";
+    for (int i = 0; i < mesh->num_elements; ++i)
+    {
+      vtkFile << "10\n"; // VTK_TETRA
+    }
+
+    vtkFile << "POINT_DATA " << mesh->num_nodes << "\n";
+    vtkFile << "VECTORS velocity double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i)
+    {
+      for (int j = 0; j < 3; ++j)
+      { // Check each component of the velocity
+        T value = vel[3 * i + j];
+        if (std::isnan(value))
+        {
+          std::cerr << "NaN detected in velocity at node " << i << ", component " << j << std::endl;
+          value = 0.0;
+        }
+        vtkFile << value << (j < 2 ? " " : "\n");
+      }
+    }
+
+    vtkFile.close();
+    std::cout << "Exported " << filename << std::endl;
   }
 
   void add_element_vec(const int nodes[], const T element_vec[],
@@ -238,38 +328,48 @@ public:
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
+      for (int j = 0; j < dof_per_element; j++)
+      {
+        if (isnan(element_internal_forces[j]))
+        {
+          printf("NaN detected in f_internal for element %d at index %d\n", i, j);
+          element_internal_forces[j] = 0.0;
+        }
+      }
 
-      printf("Current Element: %d\n", i);
+      // printf("Current Element: %d\n", i);
 
-      // wall->detect_contact(element_xloc, element_dof, element_contact_forces);
+      wall->detect_contact(element_xloc, element_dof, element_contact_forces);
 
       // Initial Computation
-      // for (int j = 0; j < dof_per_element; j++)
-      // {
-      //   element_acc[j] =
-      //       Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
-      //                    element_internal_forces[j]);
-      //   element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt * element_acc[j];
-      //   element_dof[j] += dt * element_Vr_i_plus_half[j];
-      //   element_xloc[j] += element_dof[j];
-      // }
+      for (int j = 0; j < dof_per_element; j++)
+      {
+        element_acc[j] =
+            Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
+                         element_internal_forces[j]);
+        element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt * element_acc[j];
+        element_dof[j] += dt * element_Vr_i_plus_half[j];
+        element_xloc[j] += element_dof[j];
+      }
 
       // get_reduced_dofs(); // Reduced Dofs currently not implemented
 
-      for (int j = 0; j < dof_per_element; j++)
-      {
-        printf("element_internal_forces[%d]: %f\n", j, element_internal_forces[j]);
-      }
+      // for (int j = 0; j < dof_per_element; j++)
+      // {
+      //   printf("element_internal_forces[%d]: %f\n", j, element_internal_forces[j]);
+      // }
 
-      // // assemble global vectors
-      // add_element_vec(element_nodes, element_dof, global_dof);
-      // memset(global_xloc, 0, sizeof(T) * 3 * nodes_per_element);
-      // add_element_vec(element_nodes, element_xloc, global_xloc);
-      // add_element_vec(element_nodes, element_vel, vel);
+      // assemble global vectors
+      add_element_vec(element_nodes, element_dof, global_dof);
+      memset(global_xloc, 0, sizeof(T) * 3 * nodes_per_element);
+      add_element_vec(element_nodes, element_xloc, global_xloc);
+      add_element_vec(element_nodes, element_vel, vel);
     }
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
+    int timestep = 0;
+
     while (time <= time_end)
     {
       printf("Time: %f\n", time);
@@ -312,6 +412,13 @@ public:
 
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
+        for (int j = 0; j < dof_per_element; j++)
+        {
+          if (isnan(element_internal_forces[j]))
+          {
+            element_internal_forces[j] = 0.0;
+          }
+        }
         wall->detect_contact(element_xloc, element_dof, element_contact_forces);
 
         // Initial Computation
@@ -333,7 +440,9 @@ public:
         add_element_vec(element_nodes, element_xloc, global_xloc);
         add_element_vec(element_nodes, element_vel, vel);
       }
+      export_to_vtk(timestep);
       time += dt;
+      timestep += 1;
     }
   }
 };

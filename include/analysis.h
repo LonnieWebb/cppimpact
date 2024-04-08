@@ -463,6 +463,12 @@ public:
 
       T P[spatial_dim * spatial_dim];
 
+      // Initialize P values to 0.0
+      for (int j = 0; j < spatial_dim * spatial_dim; ++j)
+      {
+        P[j] = 0.0;
+      }
+
       T mu = material->E / (2 * (1 + material->nu));
       T lambda = material->E * material->nu / ((1 + material->nu) * (1 - 2 * material->nu));
 

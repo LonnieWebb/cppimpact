@@ -277,6 +277,7 @@ public:
     // Update fixed boundary conditions
     collect_fixed_nodes();
     collect_slave_nodes();
+    // Print all values in element_nodes
   }
 
 private:
