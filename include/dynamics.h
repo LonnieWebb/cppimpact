@@ -24,7 +24,7 @@ public:
   static constexpr int dof_per_node = spatial_dim;
   BaseMaterial<T, dof_per_node> *material;
   Wall<T, dof_per_node, Basis> *wall;
-
+  T *global_xloc;
   T *vel;
 
   Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material,
@@ -34,7 +34,8 @@ public:
         wall(input_wall),
         reduced_nodes(nullptr),
         reduced_dofs_size(0),
-        vel(nullptr)
+        vel(new T[mesh->num_nodes * dof_per_node]),
+        global_xloc(new T[mesh->num_nodes * dof_per_node]) // Allocate memory for global_xloc here
   {
     ndof = mesh->num_nodes * dof_per_node;
   }
@@ -43,6 +44,7 @@ public:
   {
     delete[] reduced_nodes;
     delete[] vel;
+    delete[] global_xloc;
   }
 
   // Initialize the body. Move the mesh origin to init_position and give all
@@ -51,12 +53,11 @@ public:
                   T init_velocity[dof_per_node])
   {
     std::cout << "ndof: " << ndof << std::endl;
-    vel = new T[ndof];
     for (int i = 0; i < mesh->num_nodes; i++)
     {
-      vel[3 * i] = init_velocity[0];
-      vel[3 * i + 1] = init_velocity[1];
-      vel[3 * i + 2] = init_velocity[2];
+      // vel[3 * i] = init_velocity[0];
+      // vel[3 * i + 1] = init_velocity[1];
+      // vel[3 * i + 2] = init_velocity[2];
 
       mesh->xloc[3 * i] = mesh->xloc[3 * i] + init_position[0];
       mesh->xloc[3 * i + 1] = mesh->xloc[3 * i + 1] + init_position[1];
@@ -88,9 +89,9 @@ public:
     vtkFile << "POINTS " << mesh->num_nodes << " float\n";
     for (int i = 0; i < mesh->num_nodes; ++i)
     {
-      T x = mesh->xloc[3 * i];
-      T y = mesh->xloc[3 * i + 1];
-      T z = mesh->xloc[3 * i + 2];
+      T x = global_xloc[3 * i];
+      T y = global_xloc[3 * i + 1];
+      T z = global_xloc[3 * i + 2];
 
       // Check for NaN or extremely large values and set to 0 if found
       if (std::isnan(x) || std::isinf(x) || std::abs(x) > threshold)
@@ -150,16 +151,14 @@ public:
     std::cout << "Exported " << filename << std::endl;
   }
 
-  void add_element_vec(const int nodes[], const T element_vec[],
-                       T global_vec[])
+  void add_element_vec_3D(const int this_element_nodes[], T *element_vec, T *global_vec)
   {
     for (int j = 0; j < nodes_per_element; j++)
     {
-      int node = nodes[j];
-      for (int k = 0; k < dof_per_node; k++, element_vec++)
-      {
-        global_vec[dof_per_node * node + k] += element_vec[0];
-      }
+      int node = this_element_nodes[j];
+      global_vec[3 * node] += element_vec[3 * j];
+      global_vec[3 * node + 1] += element_vec[3 * j + 1];
+      global_vec[3 * node + 2] += element_vec[3 * j + 2];
     }
   }
 
@@ -252,25 +251,31 @@ public:
     printf("Solving dynamics\n");
 
     const T element_density = material->rho;
-    T global_dof[ndof];
+    T *global_dof = new T[ndof];
+    T *test_arr = new T[ndof];
     int *element_nodes = mesh->element_nodes;
-    T *global_xloc = mesh->xloc;
+
+    // Copy data from mesh->xloc to global_dof
+    // mesh->xloc will store initial positions
+    memcpy(global_xloc, mesh->xloc, ndof * sizeof(T));
 
     for (int i = 0; i < ndof; i++)
     {
       global_dof[i] = 0.001 * rand() / RAND_MAX;
+      vel[i] = 0.0;
+      test_arr[i] = 0.0;
     }
 
-    T element_mass_matrix_diagonals[dof_per_element];
-    T element_xloc[dof_per_element];
-    T element_dof[dof_per_element];
-    T element_forces[dof_per_element];
-    T element_vel[dof_per_element];
-    T element_acc[dof_per_element];
-    T element_internal_forces[dof_per_element];
-    T element_contact_forces[dof_per_element];
-    T element_Vr_i_plus_half[dof_per_element];
-    int this_element_nodes[nodes_per_element];
+    T *element_mass_matrix_diagonals = new T[dof_per_element];
+    T *element_xloc = new T[dof_per_element];
+    T *element_dof = new T[dof_per_element];
+    T *element_forces = new T[dof_per_element];
+    T *element_vel = new T[dof_per_element];
+    T *element_acc = new T[dof_per_element];
+    T *element_internal_forces = new T[dof_per_element];
+    T *element_contact_forces = new T[dof_per_element];
+    T *element_Vr_i_plus_half = new T[dof_per_element];
+    int *this_element_nodes = new int[nodes_per_element];
     double time = 0.0;
     // T element_density;
 
@@ -285,6 +290,11 @@ public:
       element_internal_forces[k] = 0.0;
       element_contact_forces[k] = 0.0;
       element_Vr_i_plus_half[k] = 0.0;
+    }
+
+    for (int i = 0; i < 30; i++)
+    {
+      printf("vel[%d]: %f\n", i, global_dof[i]);
     }
 
     // Loop over all elements
@@ -328,13 +338,11 @@ public:
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
+      // temporarily setting internal forces to 0
       for (int j = 0; j < dof_per_element; j++)
       {
-        if (isnan(element_internal_forces[j]))
-        {
-          printf("NaN detected in f_internal for element %d at index %d\n", i, j);
-          element_internal_forces[j] = 0.0;
-        }
+
+        element_internal_forces[j] = 0.0;
       }
 
       // printf("Current Element: %d\n", i);
@@ -347,31 +355,58 @@ public:
         element_acc[j] =
             Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
                          element_internal_forces[j]);
-        element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt * element_acc[j];
+        element_Vr_i_plus_half[j] = 0.5 * dt * element_acc[j];
         element_dof[j] += dt * element_Vr_i_plus_half[j];
-        element_xloc[j] += element_dof[j];
       }
 
-      // get_reduced_dofs(); // Reduced Dofs currently not implemented
-
-      // for (int j = 0; j < dof_per_element; j++)
-      // {
-      //   printf("element_internal_forces[%d]: %f\n", j, element_internal_forces[j]);
-      // }
-
       // assemble global vectors
-      add_element_vec(element_nodes, element_dof, global_dof);
-      memset(global_xloc, 0, sizeof(T) * 3 * nodes_per_element);
-      add_element_vec(element_nodes, element_xloc, global_xloc);
-      add_element_vec(element_nodes, element_vel, vel);
+      // for some reason this function call is not properly updating the arrays
+      // add_element_vec_3D(element_nodes, element_dof, global_dof);
+      // add_element_vec_3D(element_nodes, element_dof, global_xloc);
+      // add_element_vec_3D(element_nodes, element_Vr_i_plus_half, test_arr);
+
+      // assemble dof
+      for (int j = 0; j < nodes_per_element; j++)
+      {
+        int node = this_element_nodes[j];
+        global_dof[3 * node] += element_dof[3 * j];
+        global_dof[3 * node + 1] += element_dof[3 * j + 1];
+        global_dof[3 * node + 2] += element_dof[3 * j + 2];
+      }
+
+      // assemble xloc
+      for (int j = 0; j < nodes_per_element; j++)
+      {
+        int node = this_element_nodes[j];
+        global_xloc[3 * node] += element_dof[3 * j];
+        global_xloc[3 * node + 1] += element_dof[3 * j + 1];
+        global_xloc[3 * node + 2] += element_dof[3 * j + 2];
+      }
+
+      // assemble velocity
+      for (int j = 0; j < nodes_per_element; j++)
+      {
+        int node = this_element_nodes[j];
+        vel[3 * node] += element_Vr_i_plus_half[3 * j];
+        vel[3 * node + 1] += element_Vr_i_plus_half[3 * j + 1];
+        vel[3 * node + 2] += element_Vr_i_plus_half[3 * j + 2];
+      }
     }
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
     int timestep = 0;
+    T *next_global_dof = new T[ndof];
+    T *next_global_xloc = new T[ndof];
+    T *next_vel = new T[ndof];
+
+    memcpy(next_global_dof, global_dof, ndof * sizeof(T));
+    memcpy(next_global_xloc, global_xloc, ndof * sizeof(T));
+    memcpy(next_vel, vel, ndof * sizeof(T));
 
     while (time <= time_end)
     {
+
       printf("Time: %f\n", time);
       for (int i = 0; i < mesh->num_elements; i++)
       {
@@ -412,12 +447,12 @@ public:
 
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
+
+        // temporarily setting internal forces to 0
         for (int j = 0; j < dof_per_element; j++)
         {
-          if (isnan(element_internal_forces[j]))
-          {
-            element_internal_forces[j] = 0.0;
-          }
+
+          element_internal_forces[j] = 0.0;
         }
         wall->detect_contact(element_xloc, element_dof, element_contact_forces);
 
@@ -427,19 +462,48 @@ public:
           element_acc[j] =
               Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
                            element_internal_forces[j]);
-          element_Vr_i_plus_half[j] = element_vel[j] + 0.5 * dt * element_acc[j];
+
+          element_Vr_i_plus_half[j] = 0.5 * dt * element_acc[j];
           element_dof[j] += dt * element_Vr_i_plus_half[j];
-          element_xloc[j] += element_dof[j];
         }
 
         // get_reduced_dofs(); // Reduced Dofs currently not implemented
 
         // assemble global vectors
-        add_element_vec(element_nodes, element_dof, global_dof);
-        memset(global_xloc, 0, sizeof(T) * 3 * nodes_per_element);
-        add_element_vec(element_nodes, element_xloc, global_xloc);
-        add_element_vec(element_nodes, element_vel, vel);
+        // add_element_vec_3D(element_nodes, element_dof, global_dof);
+        // add_element_vec_3D(element_nodes, element_dof, global_xloc);
+        // add_element_vec_3D(element_nodes, element_Vr_i_plus_half, vel);
+        // assemble dof
+        for (int j = 0; j < nodes_per_element; j++)
+        {
+          int node = this_element_nodes[j];
+          next_global_dof[3 * node] += element_dof[3 * j];
+          next_global_dof[3 * node + 1] += element_dof[3 * j + 1];
+          next_global_dof[3 * node + 2] += element_dof[3 * j + 2];
+        }
+
+        // assemble xloc
+        for (int j = 0; j < nodes_per_element; j++)
+        {
+          int node = this_element_nodes[j];
+          next_global_xloc[3 * node] += element_dof[3 * j];
+          next_global_xloc[3 * node + 1] += element_dof[3 * j + 1];
+          next_global_xloc[3 * node + 2] += element_dof[3 * j + 2];
+        }
+
+        // assemble velocity
+        for (int j = 0; j < nodes_per_element; j++)
+        {
+          int node = this_element_nodes[j];
+          next_vel[3 * node] += element_Vr_i_plus_half[3 * j];
+          next_vel[3 * node + 1] += element_Vr_i_plus_half[3 * j + 1];
+          next_vel[3 * node + 2] += element_Vr_i_plus_half[3 * j + 2];
+        }
       }
+      memcpy(global_dof, next_global_dof, ndof * sizeof(T));
+      memcpy(global_xloc, next_global_xloc, ndof * sizeof(T));
+      memcpy(vel, next_vel, ndof * sizeof(T));
+
       export_to_vtk(timestep);
       time += dt;
       timestep += 1;

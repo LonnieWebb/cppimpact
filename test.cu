@@ -39,14 +39,14 @@ int main(int argc, char *argv[])
     // Set the number of degrees of freedom
 
     // Position and velocity in x, y, z
-    T init_position[] = {0.0, 1.0, 0.0};
-    T init_velocity[] = {0.0, -0.1, 0.0};
+    T init_position[] = {0.0, 0.0, 1.0};
+    T init_velocity[] = {0.0, 1.0, 0.0};
 
     const int normal = -1;
     std::string wall_name = "Wall";
     T location = 1.0;
     double dt = 0.0024;
-    double time_end = 2;
+    double time_end = 1;
 
     Wall<T, 3, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes, normal);
 
