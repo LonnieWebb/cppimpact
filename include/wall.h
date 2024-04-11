@@ -34,7 +34,7 @@ public:
 
   ~Wall() {}
 
-  void detect_contact(T *element_xloc, T *this_element_nodes, T *contact_forces)
+  void detect_contact(T *element_xloc, int *this_element_nodes, T *contact_forces)
   {
     for (size_t i = 0; i < Basis::nodes_per_element; i++)
     {
@@ -44,11 +44,11 @@ public:
         {
 
           T wall_distance = (element_xloc[3 * i + dim] - location) * normal;
-          if (wall_distance < 1e-5)
+          if (wall_distance < 0.0)
           {
-            printf("Contact detected at node %i with penetration %f",
-                   slave_node_indices[j], wall_distance);
-            contact_forces[3 * i + dim] += -stiffness * wall_distance * normal;
+            printf("Contact detected at node %i with penetration %f \n",
+                   slave_node_indices[j], -wall_distance);
+            contact_forces[3 * i + dim] += stiffness * wall_distance * normal;
           }
         }
       }

@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
 
     std::vector<std::string> node_set_names;
     // Load in the mesh
-    std::string filename("../input/Tensile1.inp");
+    std::string filename("../input/Dynamics Cube.inp");
     Mesh<T> tensile;
 
     // Material Properties
@@ -39,14 +39,14 @@ int main(int argc, char *argv[])
     // Set the number of degrees of freedom
 
     // Position and velocity in x, y, z
-    T init_position[] = {0.0, 0.0, 1.0};
-    T init_velocity[] = {0.0, 1.0, 0.0};
+    T init_position[] = {0.0, 0.0, 10.0};
+    T init_velocity[] = {1.0, 0.0, -0.5};
 
-    const int normal = -1;
+    const int normal = 1;
     std::string wall_name = "Wall";
-    T location = 1.0;
-    double dt = 0.0024;
-    double time_end = 1;
+    T location = -1.0;
+    double dt = 0.0012;
+    double time_end = 2;
 
     Wall<T, 3, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes, normal);
 
