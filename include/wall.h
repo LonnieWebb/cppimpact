@@ -48,7 +48,7 @@ public:
           {
             printf("Contact detected at node %i with penetration %f \n",
                    slave_node_indices[j], -wall_distance);
-            contact_forces[3 * i + dim] += stiffness * wall_distance * normal;
+            contact_forces[3 * i + dim] += -stiffness * wall_distance * normal;
           }
         }
       }

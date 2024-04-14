@@ -23,12 +23,12 @@ public:
   static constexpr int spatial_dim = Basis::spatial_dim;
   static constexpr int dof_per_node = spatial_dim;
   BaseMaterial<T, dof_per_node> *material;
-  Wall<T, dof_per_node, Basis> *wall;
+  Wall<T, 2, Basis> *wall;
   T *global_xloc;
   T *vel;
 
   Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material,
-           Wall<T, dof_per_node, Basis> *input_wall = nullptr)
+           Wall<T, 2, Basis> *input_wall = nullptr)
       : mesh(input_mesh),
         material(input_material),
         wall(input_wall),
@@ -252,27 +252,33 @@ public:
 
     const T element_density = material->rho;
     T *global_dof = new T[ndof];
-    T *test_arr = new T[ndof];
     int *element_nodes = mesh->element_nodes;
 
     // Copy data from mesh->xloc to global_dof
     // mesh->xloc will store initial positions
     memcpy(global_xloc, mesh->xloc, ndof * sizeof(T));
     T *next_global_dof = new T[ndof];
-    T *next_global_xloc = new T[ndof];
-    T *next_vel = new T[ndof];
+    // T *next_global_xloc = new T[ndof];
+    // T *next_vel = new T[ndof];
     T *vel_i = new T[ndof];
+    T *global_forces = new T[ndof];
+    T *global_acc = new T[ndof];
+    T *global_acc_accumulated = new T[ndof];
+    int *accumulation_count = new int[ndof];
 
     for (int i = 0; i < ndof; i++)
     {
-      global_dof[i] = 0.00001 * rand() / RAND_MAX;
-      test_arr[i] = 0.0;
+      global_dof[i] = 0.0001 * rand() / RAND_MAX;
       vel_i[i] = 0.0;
+      next_global_dof[i] = 0.0;
+      // next_global_xloc[i] = 0.0;
+      accumulation_count[i] = 0;
+      global_forces[i] = 0.0;
+      global_acc_accumulated[i] = 0.0;
+      global_acc[i] = 0.0;
     }
 
-    memcpy(next_global_dof, global_dof, ndof * sizeof(T));
-    memcpy(next_global_xloc, global_xloc, ndof * sizeof(T));
-    memcpy(next_vel, vel, ndof * sizeof(T));
+    // memcpy(next_vel, vel, ndof * sizeof(T));
 
     T *element_mass_matrix_diagonals = new T[dof_per_element];
     T *element_xloc = new T[dof_per_element];
@@ -284,26 +290,30 @@ public:
     T *element_contact_forces = new T[dof_per_element];
     T *element_Vr_i_plus_half = new T[dof_per_element];
     T *element_Vr_i_1_5 = new T[dof_per_element];
+    T *element_acc_accumulated = new T[dof_per_element];
+
     int *this_element_nodes = new int[nodes_per_element];
+
     double time = 0.0;
     // T element_density;
-
-    for (int k = 0; k < dof_per_element; k++)
-    {
-      element_mass_matrix_diagonals[k] = 0.0;
-      element_xloc[k] = 0.0;
-      element_dof[k] = 0.0;
-      element_forces[k] = 0.0;
-      element_vel[k] = 0.0;
-      element_acc[k] = 0.0;
-      element_internal_forces[k] = 0.0;
-      element_contact_forces[k] = 0.0;
-      element_Vr_i_plus_half[k] = 0.0;
-    }
 
     // Loop over all elements
     for (int i = 0; i < mesh->num_elements; i++)
     {
+      for (int k = 0; k < dof_per_element; k++)
+      {
+        element_mass_matrix_diagonals[k] = 0.0;
+        element_xloc[k] = 0.0;
+        element_dof[k] = 0.0;
+        element_forces[k] = 0.0;
+        element_vel[k] = 0.0;
+        element_acc[k] = 0.0;
+        element_internal_forces[k] = 0.0;
+        element_contact_forces[k] = 0.0;
+        element_Vr_i_plus_half[k] = 0.0;
+        element_acc_accumulated[k] = 0.0;
+      }
+
       // element_density = element_densities[i];
 
       for (int j = 0; j < nodes_per_element; j++)
@@ -325,20 +335,22 @@ public:
                                     element_mass_matrix_diagonals, i);
 
       T Mr_inv[dof_per_element];
-      int gravity_dim = 2; // placeholder gravity force
       for (int k = 0; k < dof_per_element; k++)
       {
         Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
       }
 
-      // for (int k = 0; k < nodes_per_element; k++)
-      // {
-      //   element_forces[3 * k + gravity_dim] =
-      //       -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim] / 5;
-      // }
-
-      // Initialize f_internal to zero
+      // Initialize arrays to 0
       memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+      memset(element_contact_forces, 0, sizeof(T) * 3 * nodes_per_element);
+      memset(element_forces, 0, sizeof(T) * 3 * nodes_per_element);
+
+      int gravity_dim = 2; // placeholder gravity force
+      for (int k = 0; k < nodes_per_element; k++)
+      {
+        element_forces[3 * k + gravity_dim] =
+            -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
+      }
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
@@ -356,128 +368,70 @@ public:
       // Initial Computation
       for (int j = 0; j < dof_per_element; j++)
       {
-        element_acc[j] =
-            Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
-                         element_internal_forces[j]);
-        // printf("element_acc[j]: %f \n", element_acc[j]);
-        element_Vr_i_plus_half[j] = 0.5 * dt * element_acc[j];
-        element_dof[j] += dt * element_Vr_i_plus_half[j];
+        element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
+        element_acc_accumulated[j] = Mr_inv[j] * (element_contact_forces[j] + element_forces[j]);
       }
 
-      // assemble global vectors
-      // for some reason this function call is not properly updating the arrays
-      // add_element_vec_3D(element_nodes, element_dof, global_dof);
-      // add_element_vec_3D(element_nodes, element_dof, global_xloc);
-      // add_element_vec_3D(element_nodes, element_Vr_i_plus_half, test_arr);
-
-      // assemble dof
-      // for (int j = 0; j < nodes_per_element; j++)
-      // {
-      //   int node = this_element_nodes[j];
-      //   next_global_dof[3 * node] += element_dof[3 * j];
-      //   next_global_dof[3 * node + 1] += element_dof[3 * j + 1];
-      //   next_global_dof[3 * node + 2] += element_dof[3 * j + 2];
-      // }
-
-      // assemble xloc
-      // for (int j = 0; j < nodes_per_element; j++)
-      // {
-      //   int node = this_element_nodes[j];
-      //   next_global_xloc[3 * node] += element_dof[3 * j];
-      //   next_global_xloc[3 * node + 1] += element_dof[3 * j + 1];
-      //   next_global_xloc[3 * node + 2] += element_dof[3 * j + 2];
-      // }
-
-      // assemble velocity
+      // assemble acc
       for (int j = 0; j < nodes_per_element; j++)
       {
         int node = this_element_nodes[j];
-        next_vel[3 * node] += element_Vr_i_plus_half[3 * j];
-        next_vel[3 * node + 1] += element_Vr_i_plus_half[3 * j + 1];
-        next_vel[3 * node + 2] += element_Vr_i_plus_half[3 * j + 2];
+
+        accumulation_count[3 * node] += 1;
+        accumulation_count[3 * node + 1] += 1;
+        accumulation_count[3 * node + 2] += 1;
+
+        global_acc[3 * node] += element_acc[3 * j];
+        global_acc[3 * node + 1] += element_acc[3 * j + 1];
+        global_acc[3 * node + 2] += element_acc[3 * j + 2];
+
+        global_acc_accumulated[3 * node] += element_acc_accumulated[3 * j];
+        global_acc_accumulated[3 * node + 1] += element_acc_accumulated[3 * j + 1];
+        global_acc_accumulated[3 * node + 2] += element_acc_accumulated[3 * j + 2];
       }
+    }
+
+    for (int i = 0; i < ndof; i++)
+    {
+      T dof_acc = global_acc[i] + global_acc_accumulated[i] / accumulation_count[i];
+      vel[i] += dt * dof_acc;
     }
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
     int timestep = 0;
-    memcpy(vel, next_vel, ndof * sizeof(T));
 
     while (time <= time_end)
     {
-      for (int k = 0; k < dof_per_element; k++)
-      {
-        element_mass_matrix_diagonals[k] = 0.0;
-        element_xloc[k] = 0.0;
-        element_dof[k] = 0.0;
-        element_forces[k] = 0.0;
-        element_vel[k] = 0.0;
-        element_acc[k] = 0.0;
-        element_internal_forces[k] = 0.0;
-        element_contact_forces[k] = 0.0;
-        element_Vr_i_plus_half[k] = 0.0;
-      }
-      memcpy(global_xloc, mesh->xloc, ndof * sizeof(T));
-      // Update displacement
-      for (int i = 0; i < mesh->num_elements; i++)
-      {
-        for (int j = 0; j < nodes_per_element; j++)
-        {
-          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-        }
-
-        // Get the element locations
-        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_xloc,
-                                                        element_xloc);
-        // Get the element degrees of freedom
-        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_dof,
-                                                        element_dof);
-        // Get the element velocities
-        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
-                                                        element_vel);
-
-        for (int j = 0; j < dof_per_element; j++)
-        {
-          element_dof[j] += dt * element_vel[j];
-        }
-
-        // assemble dof
-        for (int j = 0; j < nodes_per_element; j++)
-        {
-          int node = this_element_nodes[j];
-          next_global_dof[3 * node] += element_dof[3 * j];
-          next_global_dof[3 * node + 1] += element_dof[3 * j + 1];
-          next_global_dof[3 * node + 2] += element_dof[3 * j + 2];
-        }
-
-        // assemble xloc
-        for (int j = 0; j < nodes_per_element; j++)
-        {
-          int node = this_element_nodes[j];
-          next_global_xloc[3 * node] += element_dof[3 * j];
-          next_global_xloc[3 * node + 1] += element_dof[3 * j + 1];
-          next_global_xloc[3 * node + 2] += element_dof[3 * j + 2];
-        }
-      }
-
-      memcpy(global_xloc, next_global_xloc, ndof * sizeof(T));
-      memcpy(global_dof, next_global_dof, ndof * sizeof(T));
-      for (int k = 0; k < dof_per_element; k++)
-      {
-        element_mass_matrix_diagonals[k] = 0.0;
-        element_xloc[k] = 0.0;
-        element_dof[k] = 0.0;
-        element_forces[k] = 0.0;
-        element_vel[k] = 0.0;
-        element_acc[k] = 0.0;
-        element_internal_forces[k] = 0.0;
-        element_contact_forces[k] = 0.0;
-        element_Vr_i_plus_half[k] = 0.0;
-      }
+      memset(global_acc, 0, sizeof(T) * ndof);
+      memset(global_acc_accumulated, 0, sizeof(T) * ndof);
+      memset(accumulation_count, 0, sizeof(int) * ndof);
+      memset(global_xloc, 0, sizeof(T) * ndof);
 
       printf("Time: %f\n", time);
+      for (int j = 0; j < ndof; j++)
+      {
+        global_dof[j] += dt * vel[j];
+        global_xloc[j] += global_dof[j] + mesh->xloc[j];
+      }
+
       for (int i = 0; i < mesh->num_elements; i++)
       {
+
+        for (int k = 0; k < dof_per_element; k++)
+        {
+          element_mass_matrix_diagonals[k] = 0.0;
+          element_xloc[k] = 0.0;
+          element_dof[k] = 0.0;
+          element_forces[k] = 0.0;
+          element_vel[k] = 0.0;
+          element_acc[k] = 0.0;
+          element_internal_forces[k] = 0.0;
+          element_contact_forces[k] = 0.0;
+          element_Vr_i_plus_half[k] = 0.0;
+          element_acc_accumulated[k] = 0.0;
+        }
+
         for (int j = 0; j < nodes_per_element; j++)
         {
           this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
@@ -498,20 +452,23 @@ public:
                                       element_mass_matrix_diagonals, i);
 
         T Mr_inv[dof_per_element];
-        int gravity_dim = 2; // placeholder gravity force
+
         for (int k = 0; k < dof_per_element; k++)
         {
           Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
         }
 
-        // for (int k = 0; k < nodes_per_element; k++)
-        // {
-        //   element_forces[3 * k + gravity_dim] =
-        //       -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim] / 5;
-        // }
-
-        // Initialize f_internal to zero
+        // Initialize arrays to 0
         memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+        memset(element_contact_forces, 0, sizeof(T) * 3 * nodes_per_element);
+        memset(element_forces, 0, sizeof(T) * 3 * nodes_per_element);
+
+        int gravity_dim = 2; // placeholder gravity force
+        for (int k = 0; k < nodes_per_element; k++)
+        {
+          element_forces[3 * k + gravity_dim] =
+              -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
+        }
 
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
@@ -526,36 +483,37 @@ public:
 
         for (int j = 0; j < dof_per_element; j++)
         {
-          element_acc[j] =
-              Mr_inv[j] * (element_forces[j] + element_contact_forces[j] -
-                           element_internal_forces[j]);
-          element_Vr_i_1_5[j] = element_vel[j] + dt * element_acc[j];
-          element_Vr_i_plus_half[j] = element_Vr_i_1_5[j] - 0.5 * dt * element_acc[j];
+          element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
+          element_acc_accumulated[j] = Mr_inv[j] * (element_contact_forces[j] + element_forces[j]);
         }
 
-        // assemble velocity for next loop
+        // assemble acc
         for (int j = 0; j < nodes_per_element; j++)
         {
           int node = this_element_nodes[j];
-          next_vel[3 * node] += element_Vr_i_1_5[3 * j];
-          next_vel[3 * node + 1] += element_Vr_i_1_5[3 * j + 1];
-          next_vel[3 * node + 2] += element_Vr_i_1_5[3 * j + 2];
-        }
 
-        // assemble velocity for export
-        // TODO: only run this on export steps
-        for (int j = 0; j < nodes_per_element; j++)
-        {
-          int node = this_element_nodes[j];
-          vel_i[3 * node] += element_Vr_i_plus_half[3 * j];
-          vel_i[3 * node + 1] += element_Vr_i_plus_half[3 * j + 1];
-          vel_i[3 * node + 2] += element_Vr_i_plus_half[3 * j + 2];
+          accumulation_count[3 * node] += 1;
+          accumulation_count[3 * node + 1] += 1;
+          accumulation_count[3 * node + 2] += 1;
+
+          global_acc[3 * node] += element_acc[3 * j];
+          global_acc[3 * node + 1] += element_acc[3 * j + 1];
+          global_acc[3 * node + 2] += element_acc[3 * j + 2];
+
+          global_acc_accumulated[3 * node] += element_acc_accumulated[3 * j];
+          global_acc_accumulated[3 * node + 1] += element_acc_accumulated[3 * j + 1];
+          global_acc_accumulated[3 * node + 2] += element_acc_accumulated[3 * j + 2];
         }
       }
-      memcpy(vel, next_vel, ndof * sizeof(T));
-      memset(next_global_xloc, 0, ndof * sizeof(T));
-      memset(vel_i, 0, ndof * sizeof(T));
 
+      for (int i = 0; i < ndof; i++)
+      {
+        T dof_acc = global_acc[i] + global_acc_accumulated[i] / accumulation_count[i];
+        vel[i] += dt * dof_acc;
+
+        // TODO: only run this on export steps
+        vel_i[i] += -0.5 * dt * dof_acc;
+      }
       export_to_vtk(timestep);
       time += dt;
       timestep += 1;

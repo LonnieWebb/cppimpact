@@ -39,16 +39,17 @@ int main(int argc, char *argv[])
     // Set the number of degrees of freedom
 
     // Position and velocity in x, y, z
-    T init_position[] = {0.0, 0.0, 10.0};
-    T init_velocity[] = {1.0, 0.0, -0.5};
+    // TODO: something wrong with initial position
+    T init_position[] = {0.0, 0.0, 0.0};
+    T init_velocity[] = {0, 0.0, -10};
 
     const int normal = 1;
     std::string wall_name = "Wall";
-    T location = -1.0;
-    double dt = 0.0012;
+    T location = -0.1;
+    double dt = 0.002;
     double time_end = 2;
 
-    Wall<T, 3, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes, normal);
+    Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes, normal);
 
     Dynamics<T, Basis, Analysis> dyna(&tensile, &material, &w);
     dyna.initialize(init_position, init_velocity);
