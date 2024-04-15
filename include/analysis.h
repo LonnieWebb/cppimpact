@@ -4,6 +4,7 @@
 #include "tetrahedral.h"
 #include <cuda_runtime.h>
 #include "basematerial.h"
+#include "mesh.h"
 #include <cblas.h>
 
 template <typename T, class Basis, class Quadrature, class Physics>
@@ -453,76 +454,87 @@ public:
       F[4] += 1.0;
       F[8] += 1.0;
 
-      T Finv[spatial_dim * spatial_dim];
-      T FinvT[spatial_dim * spatial_dim];
-      T Fdet = inv3x3(F, Finv);
-      transpose3x3(Finv, FinvT);
-
-      T J_neo = det3x3(F); // Compute determinant of F to get J
-      T lnJ = std::log(detJ);
-
-      T P[spatial_dim * spatial_dim];
-
-      // Initialize P values to 0.0
-      for (int j = 0; j < spatial_dim * spatial_dim; ++j)
-      {
-        P[j] = 0.0;
-      }
-
       T mu = material->E / (2 * (1 + material->nu));
       T lambda = material->E * material->nu / ((1 + material->nu) * (1 - 2 * material->nu));
 
-      // Compute P: First Piola-Kirchhoff stress tensor
-      for (int j = 0; j < 9; ++j)
-      {                                // For each component in the 3x3 matrix
-        P[j] = mu * (F[j] - FinvT[j]); // mu * (F - F^{-T})
-        if (j % 4 == 0)
-        {                                  // Diagonal components
-          P[j] += lambda * lnJ * FinvT[j]; // Add lambda * ln(J) * F^{-T} term
-        }
+      T Finv[spatial_dim * spatial_dim];
+      T FinvT[spatial_dim * spatial_dim];
+
+      T Fdet = inv3x3(F, Finv);
+      transpose3x3(Finv, FinvT);
+
+      T sigma[spatial_dim * spatial_dim];
+
+      for (int j = 0; j < 9; j++)
+      {
+        sigma[j] = (mu * (F[j] - FinvT[j]) + lambda * (Fdet - 1) * Fdet * FinvT[j]);
       }
 
-      T B_matrix[6 * 3 * nodes_per_element];
-      for (int j = 0; j < 6 * 3 * nodes_per_element; ++j)
-      {
-        B_matrix[j] = 0.0;
-      }
+      T sigmaFT[spatial_dim * spatial_dim];
+      memset(sigmaFT, 0, spatial_dim * spatial_dim * sizeof(T));
+
+      // TODO: double check if output is transposed
+      cblas_dgemm(
+          CblasRowMajor, // Specifies that matrices are stored in row-major order, i.e., row elements are contiguous in memory.
+          CblasNoTrans,  // Specifies that matrix A (here, 'sigma') will not be transposed before multiplication.
+          CblasTrans,    // Specifies that matrix B (here, 'F') will be transposed before multiplication.
+          spatial_dim,   // M: The number of rows in matrices A and C.
+          spatial_dim,   // N: The number of columns in matrices B (after transpose) and C.
+          spatial_dim,   // K: The number of columns in matrix A and rows in matrix B (before transpose), denoting the inner dimension of the product.
+          1.0 / Fdet,    // alpha: Scalar multiplier applied to the product of matrices A and B.
+          sigma,         // A: Pointer to the first element of matrix A ('sigma')
+          spatial_dim,   // lda: Leading dimension of matrix A. It's the size of the major dimension of A in memory, here equal to 'spatial_dim' because of row-major order.
+          F,             // B: Pointer to the first element of matrix B ('F')
+          spatial_dim,   // ldb: Leading dimension of matrix B
+          0.0,           // beta: Scalar multiplier for matrix C before it is updated by the operation. Here, it is set to 0 to ignore the initial content of 'sigmaFT'.
+          sigmaFT,       // C: Pointer to the first element of the output matrix C ('sigmaFT'), which will store the result of the operation.
+          spatial_dim    // ldc: Leading dimension of matrix C.
+      );
+
+      T stress_vector[6];
+      stress_vector[0] = sigmaFT[0]; // sigma_xx
+      stress_vector[1] = sigmaFT[4]; // sigma_yy
+      stress_vector[2] = sigmaFT[8]; // sigma_zz
+      stress_vector[3] = sigmaFT[1]; // sigma_xy
+      stress_vector[4] = sigmaFT[5]; // sigma_yz
+      stress_vector[5] = sigmaFT[2]; // sigma_xz
+
+      T B_matrix[6 * spatial_dim * nodes_per_element];
+      memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
 
       Basis::calculate_B_matrix(Jinv, grad, B_matrix);
 
-      T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single node
-      T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a single node
-
-      // Initialize B_node and BP_node to -5.0
-      for (int j = 0; j < 18; ++j)
+      // Threshold and reset extremely small values in B_matrix
+      for (int i = 0; i < 6 * spatial_dim * nodes_per_element; ++i)
       {
-        B_node[j] = 0.0;
-      }
-      for (int j = 0; j < 9; ++j)
-      {
-        BP_node[j] = 0.0;
-      }
-
-      for (int node = 0; node < nodes_per_element; ++node)
-      {
-        // Extract the 6x3 block for this node from B
-        extract_B_node_block(B_matrix, B_node, node, nodes_per_element);
-
-        // Perform the multiplication B_node^T * P
-        cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
-                    3, 3, 6,
-                    1.0, B_node, 3,
-                    P, 3,
-                    0.0, BP_node, 3);
-
-        // Accumulate the result into f_internal for this node
-        for (int j = 0; j < 3; ++j)
+        if (fabs(B_matrix[i]) < 1e-10)
         {
-          for (int k = 0; k < 3; ++k)
-          {
-            f_internal[node * 3 + j] += BP_node[j * 3 + k] * weight * detJ; // Consider the quadrature weight and detJ
-          }
+          B_matrix[i] = 0.0;
         }
+      }
+
+      T BTS[spatial_dim * nodes_per_element];
+      memset(BTS, 0, sizeof(T) * spatial_dim * nodes_per_element);
+
+      // multiply B^T by S
+      cblas_dgemv(
+          CblasRowMajor,                   // Layout: Specifies that the matrix 'B_matrix' is stored in row-major order.
+          CblasTrans,                      // Trans: Indicates that the matrix 'B_matrix' should be transposed before multiplication.
+          6,                               // M: Number of rows in the transposed matrix. Since 'B_matrix' is transposed, this is the original number of columns.
+          spatial_dim * nodes_per_element, // N: Number of columns in the transposed matrix. Since 'B_matrix' is transposed, this is the original number of rows.
+          1.0,                             // ALPHA: Scalar multiplier for the matrix-vector product.
+          B_matrix,                        // A: Pointer to the first element of the matrix 'B_matrix'.
+          spatial_dim * nodes_per_element, // LDA: Leading dimension of the original 'B_matrix' as stored in memory.
+          stress_vector,                   // X: Pointer to the first element of the vector 'stress_vector'.
+          1,                               // INCX: Increment for the elements of 'X'. It specifies the spacing between elements of 'X' as used in the computation.
+          0.0,                             // BETA: Scalar multiplier for the vector 'C' before it is added to the result of the operation.
+          BTS,                             // Y: Pointer to the first element of the output vector 'BTS'.
+          1                                // INCY: Increment for the elements of 'Y'. It specifies the spacing between elements of 'Y' as used in storing the results.
+      );
+
+      for (int j = 0; j < spatial_dim * nodes_per_element; j++)
+      {
+        f_internal[j] += weight * detJ * BTS[j];
       }
     }
   }
@@ -539,3 +551,64 @@ public:
 
 // template __global__ void energy_kernel<T, nodes_per_element>(const int *element_nodes,
 //                                                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1);
+
+// T J_neo = det3x3(F); // Compute determinant of F to get J
+// T lnJ = std::log(detJ);
+
+// T P[spatial_dim * spatial_dim];
+
+// // Initialize P values to 0.0
+// for (int j = 0; j < spatial_dim * spatial_dim; ++j)
+// {
+//   P[j] = 0.0;
+// }
+
+// // Compute P: First Piola-Kirchhoff stress tensor
+// for (int j = 0; j < 9; ++j)
+// {                                // For each component in the 3x3 matrix
+//   P[j] = mu * (F[j] - FinvT[j]); // mu * (F - F^{-T})
+//   if (j % 4 == 0)
+//   {                                  // Diagonal components
+//     P[j] += lambda * lnJ * FinvT[j]; // Add lambda * ln(J) * F^{-T} term
+//   }
+// }
+
+// for (int j = 0; j < 6 * 3 * nodes_per_element; ++j)
+// {
+//   B_matrix[j] = 0.0;
+// }
+
+// T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single node
+// T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a single node
+
+// // Initialize B_node and BP_node to -5.0
+// for (int j = 0; j < 18; ++j)
+// {
+//   B_node[j] = 0.0;
+// }
+// for (int j = 0; j < 9; ++j)
+// {
+//   BP_node[j] = 0.0;
+// }
+
+// for (int node = 0; node < nodes_per_element; ++node)
+// {
+//   // Extract the 6x3 block for this node from B
+//   extract_B_node_block(B_matrix, B_node, node, nodes_per_element);
+
+//   // Perform the multiplication B_node^T * P
+//   cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+//               3, 3, 6,
+//               1.0, B_node, 3,
+//               P, 3,
+//               0.0, BP_node, 3);
+
+//   // Accumulate the result into f_internal for this node
+//   for (int j = 0; j < 3; ++j)
+//   {
+//     for (int k = 0; k < 3; ++k)
+//     {
+//       f_internal[node * 3 + j] += BP_node[j * 3 + k] * weight * detJ; // Consider the quadrature weight and detJ
+//     }
+//   }
+// }

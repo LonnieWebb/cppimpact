@@ -46,8 +46,6 @@ public:
           T wall_distance = (element_xloc[3 * i + dim] - location) * normal;
           if (wall_distance < 0.0)
           {
-            printf("Contact detected at node %i with penetration %f \n",
-                   slave_node_indices[j], -wall_distance);
             contact_forces[3 * i + dim] += -stiffness * wall_distance * normal;
           }
         }

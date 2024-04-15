@@ -65,7 +65,7 @@ public:
     }
   }
 
-  void export_to_vtk(int timestep)
+  void export_to_vtk(int timestep, T *vel_i)
   {
     if (timestep % 2 != 0)
       return;
@@ -137,7 +137,7 @@ public:
     {
       for (int j = 0; j < 3; ++j)
       { // Check each component of the velocity
-        T value = vel[3 * i + j];
+        T value = vel_i[3 * i + j];
         if (std::isnan(value))
         {
           std::cerr << "NaN detected in velocity at node " << i << ", component " << j << std::endl;
@@ -354,12 +354,6 @@ public:
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
-      // temporarily setting internal forces to 0
-      for (int j = 0; j < dof_per_element; j++)
-      {
-
-        element_internal_forces[j] = 0.0;
-      }
 
       // printf("Current Element: %d\n", i);
 
@@ -473,12 +467,6 @@ public:
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
 
-        // temporarily setting internal forces to 0
-        for (int j = 0; j < dof_per_element; j++)
-        {
-
-          element_internal_forces[j] = 0.0;
-        }
         wall->detect_contact(element_xloc, this_element_nodes, element_contact_forces);
 
         for (int j = 0; j < dof_per_element; j++)
@@ -514,7 +502,7 @@ public:
         // TODO: only run this on export steps
         vel_i[i] += -0.5 * dt * dof_acc;
       }
-      export_to_vtk(timestep);
+      export_to_vtk(timestep, vel_i);
       time += dt;
       timestep += 1;
     }

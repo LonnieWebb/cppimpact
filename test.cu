@@ -25,9 +25,9 @@ int main(int argc, char *argv[])
     Mesh<T> tensile;
 
     // Material Properties
-    T E = 270;
-    T rho = 1.0;
-    T nu = 0.3;
+    T E = 200;
+    T rho = 7.8;
+    T nu = 0.25;
     T beta = 0.0;
     T H = 10;
     T Y0 = 1.9 * std::sqrt(3.0);
@@ -39,8 +39,7 @@ int main(int argc, char *argv[])
     // Set the number of degrees of freedom
 
     // Position and velocity in x, y, z
-    // TODO: something wrong with initial position
-    T init_position[] = {0.0, 0.0, 0.0};
+    T init_position[] = {0.0, 10.0, 0.0};
     T init_velocity[] = {0, 0.0, -10};
 
     const int normal = 1;

@@ -60,12 +60,15 @@ public:
     Nxi[0] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
     Nxi[1] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
     Nxi[2] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
+
     Nxi[3] = 4.0 * pt[0] - 1.0;
     Nxi[4] = 0.0;
     Nxi[5] = 0.0;
+
     Nxi[6] = 0.0;
     Nxi[7] = 4.0 * pt[1] - 1.0;
     Nxi[8] = 0.0;
+
     Nxi[9] = 0.0;
     Nxi[10] = 0.0;
     Nxi[11] = 4.0 * pt[2] - 1.0;
@@ -162,38 +165,38 @@ public:
 
     for (int node = 0; node < nodes_per_element; ++node)
     {
-      T dNdx[spatial_dim]; // Placeholder for gradients in global coordinates for this node
+      // T dNdx[spatial_dim]; // Placeholder for gradients in global coordinates for this node
 
-      // Transform gradients from element to global coordinates using Jinv
-      for (int i = 0; i < spatial_dim; ++i)
-      {
-        dNdx[i] = 0.0;
-        for (int j = 0; j < spatial_dim; ++j)
-        {
-          dNdx[i] += Jinv[i * spatial_dim + j] * Nxi[node * spatial_dim + j];
-        }
-      }
+      // // Transform gradients from element to global coordinates using Jinv
+      // for (int i = 0; i < spatial_dim; ++i)
+      // {
+      //   dNdx[i] = 0.0;
+      //   for (int j = 0; j < spatial_dim; ++j)
+      //   {
+      //     dNdx[i] += Jinv[i * spatial_dim + j] * Nxi[node * spatial_dim + j];
+      //   }
+      // }
 
       // Index in the B matrix for the current node
       int idx = 3 * node;
 
       // Populate the B matrix
       // B[0][idx + 0], B[1][idx + 1], B[2][idx + 2] correspond to normal strains
-      B[0 * 3 * nodes_per_element + idx + 0] = dNdx[0];
-      B[1 * 3 * nodes_per_element + idx + 1] = dNdx[1];
-      B[2 * 3 * nodes_per_element + idx + 2] = dNdx[2];
+      B[0 * 3 * nodes_per_element + idx + 0] = Nxi[idx + 0];
+      B[1 * 3 * nodes_per_element + idx + 1] = Nxi[idx + 1];
+      B[2 * 3 * nodes_per_element + idx + 2] = Nxi[idx + 2];
 
       // B[3][idx + 0], B[3][idx + 1] correspond to shear strain gamma_xy
-      B[3 * 3 * nodes_per_element + idx + 0] = dNdx[1];
-      B[3 * 3 * nodes_per_element + idx + 1] = dNdx[0];
+      B[3 * 3 * nodes_per_element + idx + 0] = Nxi[idx + 1];
+      B[3 * 3 * nodes_per_element + idx + 1] = Nxi[idx + 0];
 
-      // B[4][idx + 1], B[4][idx + 2] correspond to shear strain gamma_yz
-      B[4 * 3 * nodes_per_element + idx + 1] = dNdx[2];
-      B[4 * 3 * nodes_per_element + idx + 2] = dNdx[1];
+      // B[4][idx + 0], B[4][idx + 2] correspond to shear strain gamma_yz
+      B[4 * 3 * nodes_per_element + idx + 0] = Nxi[idx + 2];
+      B[4 * 3 * nodes_per_element + idx + 2] = Nxi[idx + 0];
 
       // B[5][idx + 0], B[5][idx + 2] correspond to shear strain gamma_xz
-      B[5 * 3 * nodes_per_element + idx + 0] = dNdx[2];
-      B[5 * 3 * nodes_per_element + idx + 2] = dNdx[0];
+      B[5 * 3 * nodes_per_element + idx + 1] = Nxi[idx + 2];
+      B[5 * 3 * nodes_per_element + idx + 2] = Nxi[idx + 0];
     }
   }
 };
