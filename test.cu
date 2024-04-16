@@ -8,6 +8,7 @@
 #include "include/dynamics.h"
 #include "include/elastoplastic.h"
 #include "include/wall.h"
+#include <cblas.h>
 
 int main(int argc, char *argv[])
 {
@@ -25,8 +26,8 @@ int main(int argc, char *argv[])
     Mesh<T> tensile;
 
     // Material Properties
-    T E = 200;
-    T rho = 7.8;
+    T E = 200E9;  // Pa
+    T rho = 7800; // kg/m3
     T nu = 0.25;
     T beta = 0.0;
     T H = 10;
@@ -39,12 +40,12 @@ int main(int argc, char *argv[])
     // Set the number of degrees of freedom
 
     // Position and velocity in x, y, z
-    T init_position[] = {0.0, 10.0, 0.0};
+    T init_position[] = {0.0, 0.0, 0.0};
     T init_velocity[] = {0, 0.0, -10};
 
     const int normal = 1;
     std::string wall_name = "Wall";
-    T location = -0.1;
+    T location = -0.3;
     double dt = 0.002;
     double time_end = 2;
 

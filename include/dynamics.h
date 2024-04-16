@@ -354,6 +354,7 @@ public:
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
+      // memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
       // printf("Current Element: %d\n", i);
 
@@ -466,6 +467,7 @@ public:
 
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
+        // memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
         wall->detect_contact(element_xloc, this_element_nodes, element_contact_forces);
 

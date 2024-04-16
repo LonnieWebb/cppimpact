@@ -165,38 +165,60 @@ public:
 
     for (int node = 0; node < nodes_per_element; ++node)
     {
-      // T dNdx[spatial_dim]; // Placeholder for gradients in global coordinates for this node
+      T dNdx[spatial_dim]; // Placeholder for gradients in global coordinates for this node
 
-      // // Transform gradients from element to global coordinates using Jinv
-      // for (int i = 0; i < spatial_dim; ++i)
-      // {
-      //   dNdx[i] = 0.0;
-      //   for (int j = 0; j < spatial_dim; ++j)
-      //   {
-      //     dNdx[i] += Jinv[i * spatial_dim + j] * Nxi[node * spatial_dim + j];
-      //   }
-      // }
+      // Transform gradients from element to global coordinates using Jinv
+      for (int i = 0; i < spatial_dim; ++i)
+      {
+        dNdx[i] = 0.0;
+        for (int j = 0; j < spatial_dim; ++j)
+        {
+          dNdx[i] += Jinv[i * spatial_dim + j] * Nxi[node * spatial_dim + j];
+        }
+      }
 
       // Index in the B matrix for the current node
       int idx = 3 * node;
 
       // Populate the B matrix
       // B[0][idx + 0], B[1][idx + 1], B[2][idx + 2] correspond to normal strains
-      B[0 * 3 * nodes_per_element + idx + 0] = Nxi[idx + 0];
-      B[1 * 3 * nodes_per_element + idx + 1] = Nxi[idx + 1];
-      B[2 * 3 * nodes_per_element + idx + 2] = Nxi[idx + 2];
+      B[0 * 3 * nodes_per_element + idx + 0] = dNdx[0];
+      B[1 * 3 * nodes_per_element + idx + 1] = dNdx[1];
+      B[2 * 3 * nodes_per_element + idx + 2] = dNdx[2];
 
       // B[3][idx + 0], B[3][idx + 1] correspond to shear strain gamma_xy
-      B[3 * 3 * nodes_per_element + idx + 0] = Nxi[idx + 1];
-      B[3 * 3 * nodes_per_element + idx + 1] = Nxi[idx + 0];
+      B[3 * 3 * nodes_per_element + idx + 1] = dNdx[2];
+      B[3 * 3 * nodes_per_element + idx + 2] = dNdx[1];
 
       // B[4][idx + 0], B[4][idx + 2] correspond to shear strain gamma_yz
-      B[4 * 3 * nodes_per_element + idx + 0] = Nxi[idx + 2];
-      B[4 * 3 * nodes_per_element + idx + 2] = Nxi[idx + 0];
+      B[4 * 3 * nodes_per_element + idx + 0] = dNdx[2];
+      B[4 * 3 * nodes_per_element + idx + 2] = dNdx[0];
 
       // B[5][idx + 0], B[5][idx + 2] correspond to shear strain gamma_xz
-      B[5 * 3 * nodes_per_element + idx + 1] = Nxi[idx + 2];
-      B[5 * 3 * nodes_per_element + idx + 2] = Nxi[idx + 0];
+      B[5 * 3 * nodes_per_element + idx + 0] = dNdx[1];
+      B[5 * 3 * nodes_per_element + idx + 1] = dNdx[0];
+    }
+  }
+
+  template <int dof_per_node>
+  static void calculate_D_matrix(BaseMaterial<T, dof_per_node> *material, T *D_matrix)
+  {
+
+    // Set diagonal components
+    D_matrix[0 * 6 + 0] = D_matrix[1 * 6 + 1] = D_matrix[2 * 6 + 2] = 1 - material->nu;
+    D_matrix[3 * 6 + 3] = D_matrix[4 * 6 + 4] = D_matrix[5 * 6 + 5] = 1 - 2 * material->nu;
+    ;
+
+    // Set off-diagonal components
+    D_matrix[0 * 6 + 1] = D_matrix[1 * 6 + 0] = material->nu;
+    D_matrix[0 * 6 + 2] = D_matrix[2 * 6 + 0] = material->nu;
+    D_matrix[1 * 6 + 2] = D_matrix[2 * 6 + 1] = material->nu;
+
+    // Apply the scalar multiplication
+    T scalar = material->E / ((1 + material->nu) * (1 - 2 * material->nu));
+    for (int i = 0; i < 36; ++i)
+    {
+      D_matrix[i] *= scalar;
     }
   }
 };

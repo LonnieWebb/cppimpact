@@ -1,11 +1,12 @@
 #pragma once
 
-#include "physics.h"
-#include "tetrahedral.h"
+#include <cblas.h>
 #include <cuda_runtime.h>
+
 #include "basematerial.h"
 #include "mesh.h"
-#include <cblas.h>
+#include "physics.h"
+#include "tetrahedral.h"
 
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis;
@@ -19,7 +20,8 @@ void extract_B_node_block(const T *B, T *B_node, int node, int num_nodes)
 {
   for (int i = 0; i < 6; ++i)
   { // 6 rows for strain components
-    for (int j = 0; j < 3; ++j)
+    for (int j = 0; j < 3;
+         ++j)
     { // 3 columns for each node's x, y, z displacement derivatives
       B_node[i * 3 + j] = B[i * (3 * num_nodes) + (3 * node + j)];
     }
@@ -28,12 +30,15 @@ void extract_B_node_block(const T *B, T *B_node, int node, int num_nodes)
 
 void multiply_BT_node_P(const T *B_node, const T *P, T *BP_node)
 {
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < 3;
+       ++i)
   { // Iterate over rows of B^T (and resulting matrix)
-    for (int j = 0; j < 3; ++j)
+    for (int j = 0; j < 3;
+         ++j)
     {                         // Iterate over columns of P (and resulting matrix)
       BP_node[i * 3 + j] = 0; // Initialize the element to 0
-      for (int k = 0; k < 6; ++k)
+      for (int k = 0; k < 6;
+           ++k)
       { // Iterate over columns of B^T (rows of B_node)
         // Accumulate the product
         BP_node[i * 3 + j] += B_node[k * 3 + i] * P[k * 3 + j];
@@ -42,11 +47,13 @@ void multiply_BT_node_P(const T *B_node, const T *P, T *BP_node)
   }
 }
 
-template <typename T, const int nodes_per_element, const int dof_per_node, const int spatial_dim>
-__global__ void energy_kernel(const int *element_nodes,
-                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1)
+template <typename T, const int nodes_per_element, const int dof_per_node,
+          const int spatial_dim>
+__global__ void energy_kernel(const int *element_nodes, const T *xloc,
+                              const T *dof, T *total_energy, T *C1, T *D1)
 {
-  using Analysis = FEAnalysis<T, Basis, TetrahedralQuadrature, NeohookeanPhysics<T>>;
+  using Analysis =
+      FEAnalysis<T, Basis, TetrahedralQuadrature, NeohookeanPhysics<T>>;
   int element_index = blockIdx.x;
   int thread_index = threadIdx.x;
   const int dof_per_element = dof_per_node * nodes_per_element;
@@ -59,7 +66,6 @@ __global__ void energy_kernel(const int *element_nodes,
   // Get the element node locations
   if (thread_index == 0)
   {
-
     Analysis::get_element_dof<spatial_dim>(
         &element_nodes[nodes_per_element * element_index], xloc, element_xloc);
     // printf("test 3 \n");
@@ -92,11 +98,13 @@ __global__ void energy_kernel(const int *element_nodes,
   }
 }
 
-template <typename T, const int nodes_per_element, const int dof_per_node, const int spatial_dim>
-__global__ void residual_kernel(int element_nodes[], const T xloc[], const T dof[],
-                                T res[], T *C1, T *D1)
+template <typename T, const int nodes_per_element, const int dof_per_node,
+          const int spatial_dim>
+__global__ void residual_kernel(int element_nodes[], const T xloc[],
+                                const T dof[], T res[], T *C1, T *D1)
 {
-  using Analysis = FEAnalysis<T, Basis, TetrahedralQuadrature, NeohookeanPhysics<T>>;
+  using Analysis =
+      FEAnalysis<T, Basis, TetrahedralQuadrature, NeohookeanPhysics<T>>;
   const int dof_per_element = dof_per_node * nodes_per_element;
 
   __shared__ T element_res[dof_per_element];
@@ -115,7 +123,6 @@ __global__ void residual_kernel(int element_nodes[], const T xloc[], const T dof
   // Get the element node locations
   if (threadIdx.x == 0)
   {
-
     Analysis::get_element_dof<spatial_dim>(
         &element_nodes[nodes_per_element * element_index], xloc, element_xloc);
     // printf("test 3 \n");
@@ -150,8 +157,8 @@ __global__ void residual_kernel(int element_nodes[], const T xloc[], const T dof
   __syncthreads();
   if (threadIdx.x == 0)
   {
-    Analysis::add_element_res<dof_per_node>(&element_nodes[nodes_per_element * element_index],
-                                            element_res, res);
+    Analysis::add_element_res<dof_per_node>(
+        &element_nodes[nodes_per_element * element_index], element_res, res);
   }
 }
 
@@ -200,7 +207,8 @@ public:
     }
   }
 
-  static T energy(int num_elements, int element_nodes[], T xloc[], T dof[], const int num_nodes, T C1, T D1)
+  static T energy(int num_elements, int element_nodes[], T xloc[], T dof[],
+                  const int num_nodes, T C1, T D1)
   {
     cudaError_t err;
     T total_energy = 0.0;
@@ -213,8 +221,11 @@ public:
     cudaMemset(d_total_energy, 0.0, sizeof(T));
 
     int *d_element_nodes;
-    cudaMalloc(&d_element_nodes, sizeof(int) * num_elements * nodes_per_element);
-    cudaMemcpy(d_element_nodes, element_nodes, sizeof(int) * num_elements * nodes_per_element, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_element_nodes,
+               sizeof(int) * num_elements * nodes_per_element);
+    cudaMemcpy(d_element_nodes, element_nodes,
+               sizeof(int) * num_elements * nodes_per_element,
+               cudaMemcpyHostToDevice);
     err = cudaGetLastError();
     if (err != cudaSuccess)
     {
@@ -223,7 +234,8 @@ public:
 
     T *d_xloc;
     cudaMalloc(&d_xloc, sizeof(T) * num_nodes * spatial_dim);
-    cudaMemcpy(d_xloc, xloc, sizeof(T) * num_nodes * spatial_dim, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_xloc, xloc, sizeof(T) * num_nodes * spatial_dim,
+               cudaMemcpyHostToDevice);
     err = cudaGetLastError();
     if (err != cudaSuccess)
     {
@@ -232,7 +244,8 @@ public:
 
     T *d_dof;
     cudaMalloc(&d_dof, sizeof(T) * num_nodes * dof_per_node);
-    cudaMemcpy(d_dof, dof, sizeof(T) * num_nodes * dof_per_node, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dof, dof, sizeof(T) * num_nodes * dof_per_node,
+               cudaMemcpyHostToDevice);
     err = cudaGetLastError();
     if (err != cudaSuccess)
     {
@@ -251,10 +264,12 @@ public:
     printf("Num Blocks: %i \n", num_blocks);
     printf("Total Threads: %i \n", num_blocks * threads_per_block);
 
-    energy_kernel<T, nodes_per_element, dof_per_node, spatial_dim><<<num_blocks, threads_per_block>>>(d_element_nodes,
-                                                                                                      d_xloc, d_dof, d_total_energy, d_C1, d_D1);
+    energy_kernel<T, nodes_per_element, dof_per_node, spatial_dim>
+        <<<num_blocks, threads_per_block>>>(d_element_nodes, d_xloc, d_dof,
+                                            d_total_energy, d_C1, d_D1);
     cudaDeviceSynchronize();
-    cudaMemcpy(&total_energy, d_total_energy, sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&total_energy, d_total_energy, sizeof(T),
+               cudaMemcpyDeviceToHost);
 
     err = cudaGetLastError();
     if (err != cudaSuccess)
@@ -284,16 +299,21 @@ public:
     cudaMemset(d_res, 0, num_nodes * spatial_dim * sizeof(T));
 
     int *d_element_nodes;
-    cudaMalloc(&d_element_nodes, sizeof(int) * num_elements * nodes_per_element);
-    cudaMemcpy(d_element_nodes, element_nodes, sizeof(int) * num_elements * nodes_per_element, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_element_nodes,
+               sizeof(int) * num_elements * nodes_per_element);
+    cudaMemcpy(d_element_nodes, element_nodes,
+               sizeof(int) * num_elements * nodes_per_element,
+               cudaMemcpyHostToDevice);
 
     T *d_xloc;
     cudaMalloc(&d_xloc, sizeof(T) * num_nodes * spatial_dim);
-    cudaMemcpy(d_xloc, xloc, sizeof(T) * num_nodes * spatial_dim, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_xloc, xloc, sizeof(T) * num_nodes * spatial_dim,
+               cudaMemcpyHostToDevice);
 
     T *d_dof;
     cudaMalloc(&d_dof, sizeof(T) * num_nodes * dof_per_node);
-    cudaMemcpy(d_dof, dof, sizeof(T) * num_nodes * dof_per_node, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dof, dof, sizeof(T) * num_nodes * dof_per_node,
+               cudaMemcpyHostToDevice);
 
     T *d_C1;
     T *d_D1;
@@ -307,10 +327,12 @@ public:
     printf("Num Blocks: %i \n", num_blocks);
     printf("Total Threads: %i \n", num_blocks * threads_per_block);
 
-    residual_kernel<T, nodes_per_element, dof_per_node, spatial_dim><<<num_blocks, threads_per_block>>>(d_element_nodes, d_xloc, d_dof,
-                                                                                                        d_res, d_C1, d_D1);
+    residual_kernel<T, nodes_per_element, dof_per_node, spatial_dim>
+        <<<num_blocks, threads_per_block>>>(d_element_nodes, d_xloc, d_dof,
+                                            d_res, d_C1, d_D1);
     cudaDeviceSynchronize();
-    cudaMemcpy(res, d_res, num_nodes * spatial_dim * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(res, d_res, num_nodes * spatial_dim * sizeof(T),
+               cudaMemcpyDeviceToHost);
 
     err = cudaGetLastError();
     if (err != cudaSuccess)
@@ -326,9 +348,9 @@ public:
     cudaFree(d_res);
   }
 
-  static void jacobian_product(int num_elements,
-                               const int element_nodes[], const T xloc[],
-                               const T dof[], const T direct[], T res[], const T C1, const T D1)
+  static void jacobian_product(int num_elements, const int element_nodes[],
+                               const T xloc[], const T dof[], const T direct[],
+                               T res[], const T C1, const T D1)
   {
     for (int i = 0; i < num_elements; i++)
     {
@@ -387,7 +409,10 @@ public:
     }
   }
 
-  static void element_mass_matrix(const T element_density, const T *element_xloc, const T *element_dof, T *element_mass_matrix_diagonals, int element_index)
+  static void element_mass_matrix(const T element_density,
+                                  const T *element_xloc, const T *element_dof,
+                                  T *element_mass_matrix_diagonals,
+                                  int element_index)
   {
     for (int i = 0; i < nodes_per_element; i++)
     {
@@ -428,7 +453,9 @@ public:
     }
   }
 
-  static void calculate_f_internal(const T *element_xloc, const T *element_dof, T *f_internal, BaseMaterial<T, dof_per_node> *material)
+  static void calculate_f_internal(const T *element_xloc, const T *element_dof,
+                                   T *f_internal,
+                                   BaseMaterial<T, dof_per_node> *material)
   {
     T pt[spatial_dim];
     for (int i = 0; i < num_quadrature_pts; i++)
@@ -447,90 +474,89 @@ public:
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
 
-      // Compute the deformation gradient F
-      T F[spatial_dim * spatial_dim];
-      mat3x3MatMult(grad, Jinv, F);
-      F[0] += 1.0;
-      F[4] += 1.0;
-      F[8] += 1.0;
-
-      T mu = material->E / (2 * (1 + material->nu));
-      T lambda = material->E * material->nu / ((1 + material->nu) * (1 - 2 * material->nu));
-
-      T Finv[spatial_dim * spatial_dim];
-      T FinvT[spatial_dim * spatial_dim];
-
-      T Fdet = inv3x3(F, Finv);
-      transpose3x3(Finv, FinvT);
-
-      T sigma[spatial_dim * spatial_dim];
-
-      for (int j = 0; j < 9; j++)
-      {
-        sigma[j] = (mu * (F[j] - FinvT[j]) + lambda * (Fdet - 1) * Fdet * FinvT[j]);
-      }
-
-      T sigmaFT[spatial_dim * spatial_dim];
-      memset(sigmaFT, 0, spatial_dim * spatial_dim * sizeof(T));
-
-      // TODO: double check if output is transposed
-      cblas_dgemm(
-          CblasRowMajor, // Specifies that matrices are stored in row-major order, i.e., row elements are contiguous in memory.
-          CblasNoTrans,  // Specifies that matrix A (here, 'sigma') will not be transposed before multiplication.
-          CblasTrans,    // Specifies that matrix B (here, 'F') will be transposed before multiplication.
-          spatial_dim,   // M: The number of rows in matrices A and C.
-          spatial_dim,   // N: The number of columns in matrices B (after transpose) and C.
-          spatial_dim,   // K: The number of columns in matrix A and rows in matrix B (before transpose), denoting the inner dimension of the product.
-          1.0 / Fdet,    // alpha: Scalar multiplier applied to the product of matrices A and B.
-          sigma,         // A: Pointer to the first element of matrix A ('sigma')
-          spatial_dim,   // lda: Leading dimension of matrix A. It's the size of the major dimension of A in memory, here equal to 'spatial_dim' because of row-major order.
-          F,             // B: Pointer to the first element of matrix B ('F')
-          spatial_dim,   // ldb: Leading dimension of matrix B
-          0.0,           // beta: Scalar multiplier for matrix C before it is updated by the operation. Here, it is set to 0 to ignore the initial content of 'sigmaFT'.
-          sigmaFT,       // C: Pointer to the first element of the output matrix C ('sigmaFT'), which will store the result of the operation.
-          spatial_dim    // ldc: Leading dimension of matrix C.
-      );
-
-      T stress_vector[6];
-      stress_vector[0] = sigmaFT[0]; // sigma_xx
-      stress_vector[1] = sigmaFT[4]; // sigma_yy
-      stress_vector[2] = sigmaFT[8]; // sigma_zz
-      stress_vector[3] = sigmaFT[1]; // sigma_xy
-      stress_vector[4] = sigmaFT[5]; // sigma_yz
-      stress_vector[5] = sigmaFT[2]; // sigma_xz
-
       T B_matrix[6 * spatial_dim * nodes_per_element];
       memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
 
       Basis::calculate_B_matrix(Jinv, grad, B_matrix);
 
+      T D_matrix[6 * 6];
+      Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix);
+
       // Threshold and reset extremely small values in B_matrix
-      for (int i = 0; i < 6 * spatial_dim * nodes_per_element; ++i)
+      for (int j = 0; j < 6 * spatial_dim * nodes_per_element; ++j)
       {
-        if (fabs(B_matrix[i]) < 1e-10)
+        if (fabs(B_matrix[j]) < 1e-10)
         {
-          B_matrix[i] = 0.0;
+          B_matrix[j] = 0.0;
         }
       }
+
+      for (int j = 0; j < 6 * 6; ++j)
+      {
+        if (fabs(D_matrix[j]) < 1e-10)
+        {
+          D_matrix[j] = 0.0;
+        }
+      }
+
+      T intermediate_1[6];
+      memset(intermediate_1, 0, 6 * sizeof(T));
+
+      // multiply B*u
+      cblas_dgemv(CblasRowMajor,
+                  CblasNoTrans,
+                  6,
+                  30,
+                  1.0,
+                  B_matrix,
+                  30,
+                  element_dof,
+                  1,
+                  0.0,
+                  intermediate_1,
+                  1);
+
+      T sigma[6];
+      memset(sigma, 0, 6 * sizeof(T));
+      // multiply D*intermediate_1
+      cblas_dgemv(CblasRowMajor,
+                  CblasNoTrans,
+                  6,
+                  6,
+                  1.0,
+                  D_matrix,
+                  6,
+                  intermediate_1,
+                  1,
+                  0.0,
+                  sigma,
+                  1);
+
+      // T stress_vector[6];
+      // stress_vector[0] = sigma[0]; // sigma_xx
+      // stress_vector[1] = sigma[4]; // sigma_yy
+      // stress_vector[2] = sigma[8]; // sigma_zz
+      // stress_vector[3] = sigma[1]; // sigma_xy
+      // stress_vector[4] = sigma[5]; // sigma_yz
+      // stress_vector[5] = sigma[2]; // sigma_xz
 
       T BTS[spatial_dim * nodes_per_element];
       memset(BTS, 0, sizeof(T) * spatial_dim * nodes_per_element);
 
       // multiply B^T by S
       cblas_dgemv(
-          CblasRowMajor,                   // Layout: Specifies that the matrix 'B_matrix' is stored in row-major order.
-          CblasTrans,                      // Trans: Indicates that the matrix 'B_matrix' should be transposed before multiplication.
-          6,                               // M: Number of rows in the transposed matrix. Since 'B_matrix' is transposed, this is the original number of columns.
-          spatial_dim * nodes_per_element, // N: Number of columns in the transposed matrix. Since 'B_matrix' is transposed, this is the original number of rows.
-          1.0,                             // ALPHA: Scalar multiplier for the matrix-vector product.
-          B_matrix,                        // A: Pointer to the first element of the matrix 'B_matrix'.
-          spatial_dim * nodes_per_element, // LDA: Leading dimension of the original 'B_matrix' as stored in memory.
-          stress_vector,                   // X: Pointer to the first element of the vector 'stress_vector'.
-          1,                               // INCX: Increment for the elements of 'X'. It specifies the spacing between elements of 'X' as used in the computation.
-          0.0,                             // BETA: Scalar multiplier for the vector 'C' before it is added to the result of the operation.
-          BTS,                             // Y: Pointer to the first element of the output vector 'BTS'.
-          1                                // INCY: Increment for the elements of 'Y'. It specifies the spacing between elements of 'Y' as used in storing the results.
-      );
+          CblasRowMajor,
+          CblasTrans,
+          6,
+          30,
+          1.0,
+          B_matrix,
+          30,
+          sigma,
+          1,
+          0.0,
+          BTS,
+          1);
 
       for (int j = 0; j < spatial_dim * nodes_per_element; j++)
       {
@@ -549,8 +575,12 @@ public:
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 // const int nodes_per_element = Basis::nodes_per_element;
 
-// template __global__ void energy_kernel<T, nodes_per_element>(const int *element_nodes,
-//                                                              const T *xloc, const T *dof, T *total_energy, T *C1, T *D1);
+// template __global__ void energy_kernel<T, nodes_per_element>(const int
+// *element_nodes,
+//                                                              const T *xloc,
+//                                                              const T *dof, T
+//                                                              *total_energy, T
+//                                                              *C1, T *D1);
 
 // T J_neo = det3x3(F); // Compute determinant of F to get J
 // T lnJ = std::log(detJ);
@@ -579,7 +609,8 @@ public:
 // }
 
 // T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single node
-// T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a single node
+// T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a
+// single node
 
 // // Initialize B_node and BP_node to -5.0
 // for (int j = 0; j < 18; ++j)
@@ -608,7 +639,68 @@ public:
 //   {
 //     for (int k = 0; k < 3; ++k)
 //     {
-//       f_internal[node * 3 + j] += BP_node[j * 3 + k] * weight * detJ; // Consider the quadrature weight and detJ
+//       f_internal[node * 3 + j] += BP_node[j * 3 + k] * weight * detJ; //
+//       Consider the quadrature weight and detJ
 //     }
 //   }
 // }
+
+//---------------------------------------------------------------------
+
+// Compute the deformation gradient F
+// T F[spatial_dim * spatial_dim];
+// mat3x3MatMult(grad, Jinv, F);
+// F[0] += 1.0;
+// F[4] += 1.0;
+// F[8] += 1.0;
+
+// T mu = material->E / (2 * (1 + material->nu));
+// T lambda = material->E * material->nu / ((1 + material->nu) * (1 - 2 *
+// material->nu));
+
+// T Finv[spatial_dim * spatial_dim];
+// T FinvT[spatial_dim * spatial_dim];
+// T FTF[spatial_dim * spatial_dim];
+// T FT[spatial_dim * spatial_dim];
+// transpose3x3(F, FT);
+
+// mat3x3MatMult(FT, F, FTF);
+
+// T Fdet = inv3x3(F, Finv);
+// transpose3x3(Finv, FinvT);
+
+// T sigma[spatial_dim * spatial_dim];
+
+// for (int j = 0; j < 9; j++)
+// {
+//   sigma[j] = (mu * (F[j] - FinvT[j]) + lambda * (Fdet - 1) * Fdet *
+//   FinvT[j]);
+// }
+
+// T sigmaFT[spatial_dim * spatial_dim];
+// memset(sigmaFT, 0, spatial_dim * spatial_dim * sizeof(T));
+
+// // TODO: double check if output is transposed
+// cblas_dgemm(
+//     CblasRowMajor, // Specifies that matrices are stored in row-major
+//     order, i.e., row elements are contiguous in memory. CblasNoTrans,
+//     // Specifies that matrix A (here, 'sigma') will not be transposed
+//     before multiplication. CblasTrans,    // Specifies that matrix B
+//     (here, 'F') will be transposed before multiplication. spatial_dim,
+//     // M: The number of rows in matrices A and C. spatial_dim,   // N:
+//     The number of columns in matrices B (after transpose) and C.
+//     spatial_dim,   // K: The number of columns in matrix A and rows in
+//     matrix B (before transpose), denoting the inner dimension of the
+//     product. 1.0 / Fdet,    // alpha: Scalar multiplier applied to the
+//     product of matrices A and B. sigma,         // A: Pointer to the
+//     first element of matrix A ('sigma') spatial_dim,   // lda: Leading
+//     dimension of matrix A. It's the size of the major dimension of A in
+//     memory, here equal to 'spatial_dim' because of row-major order. F,
+//     // B: Pointer to the first element of matrix B ('F') spatial_dim,
+//     // ldb: Leading dimension of matrix B 0.0,           // beta:
+//     Scalar multiplier for matrix C before it is updated by the
+//     operation. Here, it is set to 0 to ignore the initial content of
+//     'sigmaFT'. sigmaFT,       // C: Pointer to the first element of the
+//     output matrix C ('sigmaFT'), which will store the result of the
+//     operation. spatial_dim    // ldc: Leading dimension of matrix C.
+// );
