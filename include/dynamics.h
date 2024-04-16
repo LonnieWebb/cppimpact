@@ -264,6 +264,7 @@ public:
     T *global_forces = new T[ndof];
     T *global_acc = new T[ndof];
     T *global_acc_accumulated = new T[ndof];
+    T *global_mass = new T[ndof];
     int *accumulation_count = new int[ndof];
 
     for (int i = 0; i < ndof; i++)
@@ -276,6 +277,7 @@ public:
       global_forces[i] = 0.0;
       global_acc_accumulated[i] = 0.0;
       global_acc[i] = 0.0;
+      global_mass[i] = 0.0;
     }
 
     // memcpy(next_vel, vel, ndof * sizeof(T));
@@ -342,29 +344,15 @@ public:
 
       // Initialize arrays to 0
       memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
-      memset(element_contact_forces, 0, sizeof(T) * 3 * nodes_per_element);
-      memset(element_forces, 0, sizeof(T) * 3 * nodes_per_element);
-
-      int gravity_dim = 2; // placeholder gravity force
-      for (int k = 0; k < nodes_per_element; k++)
-      {
-        element_forces[3 * k + gravity_dim] =
-            -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
-      }
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
       memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
-      // printf("Current Element: %d\n", i);
-
-      wall->detect_contact(element_xloc, this_element_nodes, element_contact_forces);
-
       // Initial Computation
       for (int j = 0; j < dof_per_element; j++)
       {
         element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
-        element_acc_accumulated[j] = Mr_inv[j] * (element_contact_forces[j] + element_forces[j]);
       }
 
       // assemble acc
@@ -372,25 +360,36 @@ public:
       {
         int node = this_element_nodes[j];
 
-        accumulation_count[3 * node] += 1;
-        accumulation_count[3 * node + 1] += 1;
-        accumulation_count[3 * node + 2] += 1;
-
         global_acc[3 * node] += element_acc[3 * j];
         global_acc[3 * node + 1] += element_acc[3 * j + 1];
         global_acc[3 * node + 2] += element_acc[3 * j + 2];
-
-        global_acc_accumulated[3 * node] += element_acc_accumulated[3 * j];
-        global_acc_accumulated[3 * node + 1] += element_acc_accumulated[3 * j + 1];
-        global_acc_accumulated[3 * node + 2] += element_acc_accumulated[3 * j + 2];
       }
     }
 
-    // TODO: get rid of the accumulation scheme
+    for (int i = 0; i < mesh->num_nodes; i++)
+    {
+      T node_pos[3];
+      node_pos[0] = global_xloc[3 * i];
+      node_pos[1] = global_xloc[3 * i + 1];
+      node_pos[2] = global_xloc[3 * i + 2];
+
+      T node_mass[3];
+      node_mass[0] = global_mass[3 * i];
+      node_mass[1] = global_mass[3 * i + 1];
+      node_mass[2] = global_mass[3 * i + 2];
+
+      // Contact Forces
+      T node_idx = i + 1;
+      wall->detect_contact(global_acc, node_idx, node_pos, node_mass);
+
+      // Body Forces
+      int gravity_dim = 2;
+      global_acc[3 * i + gravity_dim] += -9.81;
+    }
+
     for (int i = 0; i < ndof; i++)
     {
-      T dof_acc = global_acc[i] + global_acc_accumulated[i] / accumulation_count[i];
-      vel[i] += dt * dof_acc;
+      vel[i] += 0.5 * dt * global_acc[i];
     }
 
     //------------------- End of Initialization -------------------
@@ -403,6 +402,7 @@ public:
       memset(global_acc_accumulated, 0, sizeof(T) * ndof);
       memset(accumulation_count, 0, sizeof(int) * ndof);
       memset(global_dof, 0, sizeof(T) * ndof);
+      memset(global_mass, 0, sizeof(T) * ndof);
 
       printf("Time: %f\n", time);
       for (int j = 0; j < ndof; j++)
@@ -421,8 +421,6 @@ public:
           element_forces[k] = 0.0;
           element_vel[k] = 0.0;
           element_acc[k] = 0.0;
-          element_internal_forces[k] = 0.0;
-          element_contact_forces[k] = 0.0;
           element_Vr_i_plus_half[k] = 0.0;
           element_acc_accumulated[k] = 0.0;
         }
@@ -443,6 +441,14 @@ public:
         Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
                                       element_mass_matrix_diagonals, i);
 
+        for (int k = 0; k < dof_per_element; k++)
+        {
+          if (element_mass_matrix_diagonals[k] < 0.0)
+          {
+            element_mass_matrix_diagonals[k] = -element_mass_matrix_diagonals[k]; // TODO: Fix this
+          }
+        }
+
         T Mr_inv[dof_per_element];
 
         for (int k = 0; k < dof_per_element; k++)
@@ -452,33 +458,14 @@ public:
 
         // Initialize arrays to 0
         memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
-        memset(element_contact_forces, 0, sizeof(T) * 3 * nodes_per_element);
-        memset(element_forces, 0, sizeof(T) * 3 * nodes_per_element);
-
-        int gravity_dim = 2; // placeholder gravity force
-        for (int k = 0; k < nodes_per_element; k++)
-        {
-          element_forces[3 * k + gravity_dim] =
-              -9.81 * element_mass_matrix_diagonals[3 * k + gravity_dim];
-        }
 
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
         memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
-        wall->detect_contact(element_xloc, this_element_nodes, element_contact_forces);
-        for (int j = 0; j < dof_per_element; j++)
-        {
-          if (element_contact_forces[j] != 0)
-          {
-            T test = 0.0;
-          }
-        }
-
         for (int j = 0; j < dof_per_element; j++)
         {
           element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]); // TODO: check sign
-          element_acc_accumulated[j] = Mr_inv[j] * (element_contact_forces[j] + element_forces[j]);
         }
 
         // assemble acc
@@ -486,28 +473,45 @@ public:
         {
           int node = this_element_nodes[j];
 
-          accumulation_count[3 * node] += 1;
-          accumulation_count[3 * node + 1] += 1;
-          accumulation_count[3 * node + 2] += 1;
-
           global_acc[3 * node] += element_acc[3 * j];
           global_acc[3 * node + 1] += element_acc[3 * j + 1];
           global_acc[3 * node + 2] += element_acc[3 * j + 2];
 
-          global_acc_accumulated[3 * node] += element_acc_accumulated[3 * j];
-          global_acc_accumulated[3 * node + 1] += element_acc_accumulated[3 * j + 1];
-          global_acc_accumulated[3 * node + 2] += element_acc_accumulated[3 * j + 2];
+          global_mass[3 * node] += element_mass_matrix_diagonals[3 * j];
+          global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
+          global_mass[3 * node + 2] += element_mass_matrix_diagonals[3 * j + 2];
         }
       }
+
+      for (int i = 0; i < mesh->num_nodes; i++)
+      {
+        T node_pos[3];
+        node_pos[0] = global_xloc[3 * i] + global_dof[3 * i];
+        node_pos[1] = global_xloc[3 * i + 1] + global_dof[3 * i + 1];
+        node_pos[2] = global_xloc[3 * i + 2] + global_dof[3 * i + 2];
+
+        T node_mass[3];
+        node_mass[0] = global_mass[3 * i];
+        node_mass[1] = global_mass[3 * i + 1];
+        node_mass[2] = global_mass[3 * i + 2];
+
+        // Contact Forces
+        T node_idx = i + 1;
+        wall->detect_contact(global_acc, node_idx, node_pos, node_mass);
+
+        // Body Forces
+        int gravity_dim = 2;
+        global_acc[3 * i + gravity_dim] += -9.81;
+      }
+      printf("\n");
 
       for (int i = 0; i < ndof; i++)
       {
         global_xloc[i] += global_dof[i];
-        T dof_acc = global_acc[i] + global_acc_accumulated[i] / accumulation_count[i];
-        vel[i] += dt * dof_acc;
+        vel[i] += dt * global_acc[i];
 
         // TODO: only run this on export steps
-        vel_i[i] += -0.5 * dt * dof_acc;
+        vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
       }
       export_to_vtk(timestep, vel_i);
       time += dt;

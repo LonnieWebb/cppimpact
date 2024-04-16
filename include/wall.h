@@ -34,19 +34,19 @@ public:
 
   ~Wall() {}
 
-  void detect_contact(T *element_xloc, int *this_element_nodes, T *contact_forces)
+  void detect_contact(T *global_acc, int node_idx, T *node_pos, T *node_mass)
   {
-    for (size_t i = 0; i < Basis::nodes_per_element; i++)
+    for (int j = 0; j < num_slave_nodes; j++)
     {
-      for (int j = 0; j < num_slave_nodes; j++)
+      if (node_idx == slave_node_indices[j])
       {
-        if (this_element_nodes[i] == slave_node_indices[j])
+        T wall_distance = (node_pos[dim] - location) * normal;
+        if (wall_distance < 0.0)
         {
-
-          T wall_distance = (element_xloc[3 * i + dim] - location) * normal;
-          if (wall_distance < 0.0)
+          global_acc[3 * (node_idx - 1) + dim] += -1 * (1 / node_mass[dim]) * stiffness * wall_distance * normal;
+          if (-1 * (1 / node_mass[dim]) * stiffness * wall_distance * normal < 0.0)
           {
-            contact_forces[3 * i + dim] += -stiffness * wall_distance * normal;
+            printf("Error: Acceleration calculation resulted in a negative value.\n");
           }
         }
       }
