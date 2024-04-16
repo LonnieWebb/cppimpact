@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     Mesh<T> tensile;
 
     // Material Properties
-    T E = 200E9;  // Pa
+    T E = 200;    // Pa
     T rho = 7800; // kg/m3
     T nu = 0.25;
     T beta = 0.0;
@@ -45,8 +45,8 @@ int main(int argc, char *argv[])
 
     const int normal = 1;
     std::string wall_name = "Wall";
-    T location = -0.3;
-    double dt = 0.002;
+    T location = -0.05;
+    double dt = 0.001;
     double time_end = 2;
 
     Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes, tensile.num_slave_nodes, normal);

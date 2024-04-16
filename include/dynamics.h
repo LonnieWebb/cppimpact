@@ -354,7 +354,7 @@ public:
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
-      // memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+      memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
       // printf("Current Element: %d\n", i);
 
@@ -386,6 +386,7 @@ public:
       }
     }
 
+    // TODO: get rid of the accumulation scheme
     for (int i = 0; i < ndof; i++)
     {
       T dof_acc = global_acc[i] + global_acc_accumulated[i] / accumulation_count[i];
@@ -401,13 +402,12 @@ public:
       memset(global_acc, 0, sizeof(T) * ndof);
       memset(global_acc_accumulated, 0, sizeof(T) * ndof);
       memset(accumulation_count, 0, sizeof(int) * ndof);
-      memset(global_xloc, 0, sizeof(T) * ndof);
+      memset(global_dof, 0, sizeof(T) * ndof);
 
       printf("Time: %f\n", time);
       for (int j = 0; j < ndof; j++)
       {
-        global_dof[j] += dt * vel[j];
-        global_xloc[j] += global_dof[j] + mesh->xloc[j];
+        global_dof[j] = dt * vel[j];
       }
 
       for (int i = 0; i < mesh->num_elements; i++)
@@ -438,9 +438,6 @@ public:
         // Get the element degrees of freedom
         Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_dof,
                                                         element_dof);
-        // Get the element velocities
-        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
-                                                        element_vel);
 
         // might be able to avoid recaculating this
         Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
@@ -467,13 +464,20 @@ public:
 
         Analysis::calculate_f_internal(element_xloc, element_dof,
                                        element_internal_forces, material);
-        // memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+        memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
         wall->detect_contact(element_xloc, this_element_nodes, element_contact_forces);
+        for (int j = 0; j < dof_per_element; j++)
+        {
+          if (element_contact_forces[j] != 0)
+          {
+            T test = 0.0;
+          }
+        }
 
         for (int j = 0; j < dof_per_element; j++)
         {
-          element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
+          element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]); // TODO: check sign
           element_acc_accumulated[j] = Mr_inv[j] * (element_contact_forces[j] + element_forces[j]);
         }
 
@@ -498,6 +502,7 @@ public:
 
       for (int i = 0; i < ndof; i++)
       {
+        global_xloc[i] += global_dof[i];
         T dof_acc = global_acc[i] + global_acc_accumulated[i] / accumulation_count[i];
         vel[i] += dt * dof_acc;
 
