@@ -1,19 +1,18 @@
 #pragma once
-#include <iostream>
-#include <numeric>
+#include <cfloat>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
-#include <cmath>
-#include <cfloat>
+#include <iostream>
+#include <numeric>
 
 #include "basematerial.h"
 #include "mesh.h"
 #include "wall.h"
 
 template <typename T, class Basis, class Analysis>
-class Dynamics
-{
-public:
+class Dynamics {
+ public:
   Mesh<T> *mesh;
 
   int *reduced_nodes;
@@ -35,13 +34,14 @@ public:
         reduced_nodes(nullptr),
         reduced_dofs_size(0),
         vel(new T[mesh->num_nodes * dof_per_node]),
-        global_xloc(new T[mesh->num_nodes * dof_per_node]) // Allocate memory for global_xloc here
+        global_xloc(
+            new T[mesh->num_nodes *
+                  dof_per_node])  // Allocate memory for global_xloc here
   {
     ndof = mesh->num_nodes * dof_per_node;
   }
 
-  ~Dynamics()
-  {
+  ~Dynamics() {
     delete[] reduced_nodes;
     delete[] vel;
     delete[] global_xloc;
@@ -50,11 +50,9 @@ public:
   // Initialize the body. Move the mesh origin to init_position and give all
   // nodes init_velocity.
   void initialize(T init_position[dof_per_node],
-                  T init_velocity[dof_per_node])
-  {
+                  T init_velocity[dof_per_node]) {
     std::cout << "ndof: " << ndof << std::endl;
-    for (int i = 0; i < mesh->num_nodes; i++)
-    {
+    for (int i = 0; i < mesh->num_nodes; i++) {
       vel[3 * i] = init_velocity[0];
       vel[3 * i + 1] = init_velocity[1];
       vel[3 * i + 2] = init_velocity[2];
@@ -65,17 +63,15 @@ public:
     }
   }
 
-  void export_to_vtk(int timestep, T *vel_i)
-  {
-    if (timestep % 2 != 0)
-      return;
+  void export_to_vtk(int timestep, T *vel_i) {
+    if (timestep % 2 != 0) return;
 
     const std::string directory = "../output";
-    const std::string filename = directory + "/simulation_" + std::to_string(timestep) + ".vtk";
+    const std::string filename =
+        directory + "/simulation_" + std::to_string(timestep) + ".vtk";
     std::ofstream vtkFile(filename);
 
-    if (!vtkFile.is_open())
-    {
+    if (!vtkFile.is_open()) {
       std::cerr << "Failed to open " << filename << std::endl;
       return;
     }
@@ -87,26 +83,31 @@ public:
     const double threshold = 1e6;
 
     vtkFile << "POINTS " << mesh->num_nodes << " float\n";
-    for (int i = 0; i < mesh->num_nodes; ++i)
-    {
+    for (int i = 0; i < mesh->num_nodes; ++i) {
       T x = global_xloc[3 * i];
       T y = global_xloc[3 * i + 1];
       T z = global_xloc[3 * i + 2];
 
       // Check for NaN or extremely large values and set to 0 if found
-      if (std::isnan(x) || std::isinf(x) || std::abs(x) > threshold)
-      {
-        printf("Invalid value detected in x-coordinate at node %d: %f, setting to 0.\n", i, x);
+      if (std::isnan(x) || std::isinf(x) || std::abs(x) > threshold) {
+        printf(
+            "Invalid value detected in x-coordinate at node %d: %f, setting to "
+            "0.\n",
+            i, x);
         x = 0.0;
       }
-      if (std::isnan(y) || std::isinf(y) || std::abs(y) > threshold)
-      {
-        printf("Invalid value detected in y-coordinate at node %d: %f, setting to 0.\n", i, y);
+      if (std::isnan(y) || std::isinf(y) || std::abs(y) > threshold) {
+        printf(
+            "Invalid value detected in y-coordinate at node %d: %f, setting to "
+            "0.\n",
+            i, y);
         y = 0.0;
       }
-      if (std::isnan(z) || std::isinf(z) || std::abs(z) > threshold)
-      {
-        printf("Invalid value detected in z-coordinate at node %d: %f, setting to 0.\n", i, z);
+      if (std::isnan(z) || std::isinf(z) || std::abs(z) > threshold) {
+        printf(
+            "Invalid value detected in z-coordinate at node %d: %f, setting to "
+            "0.\n",
+            i, z);
         z = 0.0;
       }
 
@@ -114,33 +115,30 @@ public:
       vtkFile << x << " " << y << " " << z << "\n";
     }
 
-    vtkFile << "CELLS " << mesh->num_elements << " " << mesh->num_elements * (nodes_per_element + 1) << "\n";
-    for (int i = 0; i < mesh->num_elements; ++i)
-    {
-      vtkFile << nodes_per_element; // Number of points in this cell
-      for (int j = 0; j < nodes_per_element; ++j)
-      {
+    vtkFile << "CELLS " << mesh->num_elements << " "
+            << mesh->num_elements * (nodes_per_element + 1) << "\n";
+    for (int i = 0; i < mesh->num_elements; ++i) {
+      vtkFile << nodes_per_element;  // Number of points in this cell
+      for (int j = 0; j < nodes_per_element; ++j) {
         vtkFile << " " << mesh->element_nodes[nodes_per_element * i + j];
       }
-      vtkFile << "\n"; // Ensure newline at the end of each cell's connectivity list
+      vtkFile << "\n";  // Ensure newline at the end of each cell's connectivity
+                        // list
     }
 
     vtkFile << "CELL_TYPES " << mesh->num_elements << "\n";
-    for (int i = 0; i < mesh->num_elements; ++i)
-    {
-      vtkFile << "10\n"; // VTK_TETRA
+    for (int i = 0; i < mesh->num_elements; ++i) {
+      vtkFile << "10\n";  // VTK_TETRA
     }
 
     vtkFile << "POINT_DATA " << mesh->num_nodes << "\n";
     vtkFile << "VECTORS velocity double\n";
-    for (int i = 0; i < mesh->num_nodes; ++i)
-    {
-      for (int j = 0; j < 3; ++j)
-      { // Check each component of the velocity
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      for (int j = 0; j < 3; ++j) {  // Check each component of the velocity
         T value = vel_i[3 * i + j];
-        if (std::isnan(value))
-        {
-          std::cerr << "NaN detected in velocity at node " << i << ", component " << j << std::endl;
+        if (std::isnan(value)) {
+          std::cerr << "NaN detected in velocity at node " << i
+                    << ", component " << j << std::endl;
           value = 0.0;
         }
         vtkFile << value << (j < 2 ? " " : "\n");
@@ -151,10 +149,9 @@ public:
     std::cout << "Exported " << filename << std::endl;
   }
 
-  void add_element_vec_3D(const int this_element_nodes[], T *element_vec, T *global_vec)
-  {
-    for (int j = 0; j < nodes_per_element; j++)
-    {
+  void add_element_vec_3D(const int this_element_nodes[], T *element_vec,
+                          T *global_vec) {
+    for (int j = 0; j < nodes_per_element; j++) {
       int node = this_element_nodes[j];
       global_vec[3 * node] += element_vec[3 * j];
       global_vec[3 * node + 1] += element_vec[3 * j + 1];
@@ -162,10 +159,8 @@ public:
     }
   }
 
-  void get_node_global_dofs(const int node_idx, int *global_dof_idx)
-  {
-    for (int i = 0; i < dof_per_node; i++)
-    {
+  void get_node_global_dofs(const int node_idx, int *global_dof_idx) {
+    for (int i = 0; i < dof_per_node; i++) {
       global_dof_idx[i] = node_idx * dof_per_node + i;
     }
   }
@@ -173,38 +168,32 @@ public:
   // This function is used to get the reduced degrees of freedom (DOFs) of the
   // system. It first initializes the reduced DOFs to be all DOFs, then removes
   // the fixed DOFs.
-  void get_reduced_nodes()
-  {
+  void get_reduced_nodes() {
     // Safe deletion in case it was already allocated
     delete[] reduced_nodes;
 
     // Allocate memory for reduced DOFs
     reduced_nodes = new int[mesh->num_nodes];
 
-    for (int i = 0; i < mesh->num_nodes; i++)
-    {
+    for (int i = 0; i < mesh->num_nodes; i++) {
       reduced_nodes[i] = mesh->element_nodes[i];
     }
 
     // Loop over all fixed nodes
-    for (int i = 0; i < mesh->num_fixed_nodes; i++)
-    {
+    for (int i = 0; i < mesh->num_fixed_nodes; i++) {
       // Get the value of the fixed node
       int fixed_node_value = mesh->fixed_nodes[i];
 
       // Loop over reduced_nodes and mark matching nodes as -1
-      for (int j = 0; j < mesh->num_nodes; j++)
-      {
-        if (reduced_nodes[j] == fixed_node_value)
-        {
-          reduced_nodes[j] = -1; // Mark this node as fixed
+      for (int j = 0; j < mesh->num_nodes; j++) {
+        if (reduced_nodes[j] == fixed_node_value) {
+          reduced_nodes[j] = -1;  // Mark this node as fixed
         }
       }
     }
   }
 
-  void assemble_diagonal_mass_vector(T *mass_vector)
-  {
+  void assemble_diagonal_mass_vector(T *mass_vector) {
     /*
     Assemble the global mass matrix in diagonal form.
     Steps
@@ -226,8 +215,7 @@ public:
   //   xloc = new_xloc;
   // }
 
-  void solve(double dt, double time_end)
-  {
+  void solve(double dt, double time_end) {
     // Perform a dynamic analysis. The algorithm is staggered as follows:
     // This assumes that the initial u, v, a and fext are already initialized
     // at nodes.
@@ -267,9 +255,9 @@ public:
     T *global_mass = new T[ndof];
     int *accumulation_count = new int[ndof];
 
-    for (int i = 0; i < ndof; i++)
-    {
-      global_dof[i] = 0.0001 * rand() / RAND_MAX;
+    for (int i = 0; i < ndof; i++) {
+      // global_dof[i] = 0.0001 * rand() / RAND_MAX;
+      global_dof[i] = 0.0;
       vel_i[i] = 0.0;
       next_global_dof[i] = 0.0;
       // next_global_xloc[i] = 0.0;
@@ -300,10 +288,8 @@ public:
     // T element_density;
 
     // Loop over all elements
-    for (int i = 0; i < mesh->num_elements; i++)
-    {
-      for (int k = 0; k < dof_per_element; k++)
-      {
+    for (int i = 0; i < mesh->num_elements; i++) {
+      for (int k = 0; k < dof_per_element; k++) {
         element_mass_matrix_diagonals[k] = 0.0;
         element_xloc[k] = 0.0;
         element_dof[k] = 0.0;
@@ -318,17 +304,16 @@ public:
 
       // element_density = element_densities[i];
 
-      for (int j = 0; j < nodes_per_element; j++)
-      {
+      for (int j = 0; j < nodes_per_element; j++) {
         this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
       }
 
       // Get the element locations
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_xloc,
-                                                      element_xloc);
+      Analysis::template get_element_dof<spatial_dim>(
+          this_element_nodes, global_xloc, element_xloc);
       // Get the element degrees of freedom
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_dof,
-                                                      element_dof);
+      Analysis::template get_element_dof<spatial_dim>(this_element_nodes,
+                                                      global_dof, element_dof);
       // Get the element velocities
       Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
                                                       element_vel);
@@ -337,8 +322,7 @@ public:
                                     element_mass_matrix_diagonals, i);
 
       T Mr_inv[dof_per_element];
-      for (int k = 0; k < dof_per_element; k++)
-      {
+      for (int k = 0; k < dof_per_element; k++) {
         Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
       }
 
@@ -347,17 +331,15 @@ public:
 
       Analysis::calculate_f_internal(element_xloc, element_dof,
                                      element_internal_forces, material);
-      memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+      // memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
 
       // Initial Computation
-      for (int j = 0; j < dof_per_element; j++)
-      {
-        element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
+      for (int j = 0; j < dof_per_element; j++) {
+        element_acc[j] = Mr_inv[j] * (element_internal_forces[j]);
       }
 
       // assemble acc
-      for (int j = 0; j < nodes_per_element; j++)
-      {
+      for (int j = 0; j < nodes_per_element; j++) {
         int node = this_element_nodes[j];
 
         global_acc[3 * node] += element_acc[3 * j];
@@ -366,8 +348,7 @@ public:
       }
     }
 
-    for (int i = 0; i < mesh->num_nodes; i++)
-    {
+    for (int i = 0; i < mesh->num_nodes; i++) {
       T node_pos[3];
       node_pos[0] = global_xloc[3 * i];
       node_pos[1] = global_xloc[3 * i + 1];
@@ -384,11 +365,10 @@ public:
 
       // Body Forces
       int gravity_dim = 2;
-      global_acc[3 * i + gravity_dim] += -9.81;
+      // global_acc[3 * i + gravity_dim] += -9.81;
     }
 
-    for (int i = 0; i < ndof; i++)
-    {
+    for (int i = 0; i < ndof; i++) {
       vel[i] += 0.5 * dt * global_acc[i];
     }
 
@@ -396,8 +376,7 @@ public:
     // ------------------- Start of Time Loop -------------------
     int timestep = 0;
 
-    while (time <= time_end)
-    {
+    while (time <= time_end) {
       memset(global_acc, 0, sizeof(T) * ndof);
       memset(global_acc_accumulated, 0, sizeof(T) * ndof);
       memset(accumulation_count, 0, sizeof(int) * ndof);
@@ -405,16 +384,12 @@ public:
       memset(global_mass, 0, sizeof(T) * ndof);
 
       printf("Time: %f\n", time);
-      for (int j = 0; j < ndof; j++)
-      {
+      for (int j = 0; j < ndof; j++) {
         global_dof[j] = dt * vel[j];
       }
 
-      for (int i = 0; i < mesh->num_elements; i++)
-      {
-
-        for (int k = 0; k < dof_per_element; k++)
-        {
+      for (int i = 0; i < mesh->num_elements; i++) {
+        for (int k = 0; k < dof_per_element; k++) {
           element_mass_matrix_diagonals[k] = 0.0;
           element_xloc[k] = 0.0;
           element_dof[k] = 0.0;
@@ -425,57 +400,25 @@ public:
           element_acc_accumulated[k] = 0.0;
         }
 
-        for (int j = 0; j < nodes_per_element; j++)
-        {
+        for (int j = 0; j < nodes_per_element; j++) {
           this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
         }
 
         // Get the element locations
-        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_xloc,
-                                                        element_xloc);
+        Analysis::template get_element_dof<spatial_dim>(
+            this_element_nodes, global_xloc, element_xloc);
         // Get the element degrees of freedom
-        Analysis::template get_element_dof<spatial_dim>(this_element_nodes, global_dof,
-                                                        element_dof);
+        Analysis::template get_element_dof<spatial_dim>(
+            this_element_nodes, global_dof, element_dof);
 
         // might be able to avoid recaculating this
-        Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
+        Analysis::element_mass_matrix(element_density, element_xloc,
+                                      element_dof,
                                       element_mass_matrix_diagonals, i);
 
-        for (int k = 0; k < dof_per_element; k++)
-        {
-          if (element_mass_matrix_diagonals[k] < 0.0)
-          {
-            element_mass_matrix_diagonals[k] = -element_mass_matrix_diagonals[k]; // TODO: Fix this
-          }
-        }
-
-        T Mr_inv[dof_per_element];
-
-        for (int k = 0; k < dof_per_element; k++)
-        {
-          Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
-        }
-
-        // Initialize arrays to 0
-        memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
-
-        Analysis::calculate_f_internal(element_xloc, element_dof,
-                                       element_internal_forces, material);
-        memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
-
-        for (int j = 0; j < dof_per_element; j++)
-        {
-          element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]); // TODO: check sign
-        }
-
         // assemble acc
-        for (int j = 0; j < nodes_per_element; j++)
-        {
+        for (int j = 0; j < nodes_per_element; j++) {
           int node = this_element_nodes[j];
-
-          global_acc[3 * node] += element_acc[3 * j];
-          global_acc[3 * node + 1] += element_acc[3 * j + 1];
-          global_acc[3 * node + 2] += element_acc[3 * j + 2];
 
           global_mass[3 * node] += element_mass_matrix_diagonals[3 * j];
           global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
@@ -483,8 +426,63 @@ public:
         }
       }
 
-      for (int i = 0; i < mesh->num_nodes; i++)
-      {
+      for (int i = 0; i < mesh->num_elements; i++) {
+        for (int k = 0; k < dof_per_element; k++) {
+          element_mass_matrix_diagonals[k] = 0.0;
+          element_xloc[k] = 0.0;
+          element_dof[k] = 0.0;
+          element_forces[k] = 0.0;
+          element_vel[k] = 0.0;
+          element_acc[k] = 0.0;
+          element_Vr_i_plus_half[k] = 0.0;
+          element_acc_accumulated[k] = 0.0;
+        }
+
+        for (int j = 0; j < nodes_per_element; j++) {
+          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
+        }
+
+        T element_mass_matrix_diagonals[dof_per_element];
+        // Get the element locations
+        Analysis::template get_element_dof<spatial_dim>(
+            this_element_nodes, global_mass, element_mass_matrix_diagonals);
+
+        Analysis::template get_element_dof<spatial_dim>(
+            this_element_nodes, global_xloc, element_xloc);
+
+        // Get the element degrees of freedom
+        Analysis::template get_element_dof<spatial_dim>(
+            this_element_nodes, global_dof, element_dof);
+
+        T Mr_inv[dof_per_element];
+
+        for (int k = 0; k < dof_per_element; k++) {
+          Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
+        }
+
+        // Initialize arrays to 0
+        memset(element_internal_forces, 0, sizeof(T) * 3 * nodes_per_element);
+        Analysis::calculate_f_internal(element_xloc, element_dof,
+                                       element_internal_forces, material);
+        // memset(element_internal_forces, 0, sizeof(T) * 3 *
+        // nodes_per_element);
+
+        for (int j = 0; j < dof_per_element; j++) {
+          element_acc[j] =
+              Mr_inv[j] * (element_internal_forces[j]);  // TODO: check sign
+        }
+
+        // assemble acc
+        for (int j = 0; j < nodes_per_element; j++) {
+          int node = this_element_nodes[j];
+
+          global_acc[3 * node] += element_acc[3 * j];
+          global_acc[3 * node + 1] += element_acc[3 * j + 1];
+          global_acc[3 * node + 2] += element_acc[3 * j + 2];
+        }
+      }
+
+      for (int i = 0; i < mesh->num_nodes; i++) {
         T node_pos[3];
         node_pos[0] = global_xloc[3 * i] + global_dof[3 * i];
         node_pos[1] = global_xloc[3 * i + 1] + global_dof[3 * i + 1];
@@ -501,12 +499,18 @@ public:
 
         // Body Forces
         int gravity_dim = 2;
-        global_acc[3 * i + gravity_dim] += -9.81;
+        // global_acc[3 * i + gravity_dim] += -9.81;
       }
-      printf("\n");
 
-      for (int i = 0; i < ndof; i++)
-      {
+      T total_mass = 0.0;
+      for (int i = 0; i < ndof; i++) {
+        total_mass += global_mass[i] / 3;
+      }
+
+      printf("Iteration: %i \n", timestep);
+      printf("Total mass: %f\n", total_mass);
+
+      for (int i = 0; i < ndof; i++) {
         global_xloc[i] += global_dof[i];
         vel[i] += dt * global_acc[i];
 
