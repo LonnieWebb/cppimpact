@@ -11,7 +11,8 @@
 #include "include/tetrahedral.h"
 #include "include/wall.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   using T = double;
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
@@ -26,8 +27,8 @@ int main(int argc, char *argv[]) {
   Mesh<T> tensile;
 
   // Material Properties
-  T E = 200;    // Pa
-  T rho = 7.8;  // kg/m3
+  T E = 2000;  // Pa
+  T rho = 7.8; // kg/m3
   T nu = 0.25;
   T beta = 0.0;
   T H = 10;
@@ -40,14 +41,14 @@ int main(int argc, char *argv[]) {
   // Set the number of degrees of freedom
 
   // Position and velocity in x, y, z
-  T init_position[] = {0, 0, 0};
-  T init_velocity[] = {0, 0.0, -10};
+  T init_position[] = {0.1, 0.1, 0.1};
+  T init_velocity[] = {0, 0.0, -0.1};
 
   const int normal = 1;
   std::string wall_name = "Wall";
-  T location = -0.5;
-  double dt = 0.002;
-  double time_end = 0.6;
+  T location = 0.0999;
+  double dt = 0.00005;
+  double time_end = 3;
 
   Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);
