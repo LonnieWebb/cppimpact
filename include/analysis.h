@@ -455,10 +455,6 @@ public:
       T J[spatial_dim * spatial_dim];
       Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
-      // Evaluate the derivative of the dof in the computational coordinates
-      // T grad[dof_per_node * spatial_dim];
-      // Basis::template eval_grad<dof_per_node>(pt, element_dof, grad);
-
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
@@ -504,13 +500,6 @@ public:
         f_internal[j] += weight * detJ * BTS[j];
       }
     }
-
-    // for (int i = 0; i < 30; i++) {
-    //   printf("element_dof[i] %f \n", element_dof[i]);
-    // }
-    // for (int i = 0; i < 6; i++) {
-    //   printf("Stress[i] %f \n", sigma[i]);
-    // }
   }
 };
 

@@ -1,6 +1,6 @@
 #include <cblas.h>
 #include <cuda_runtime.h>
-
+#include <chrono>
 #include <string>
 
 #include "include/analysis.h"
@@ -27,8 +27,8 @@ int main(int argc, char *argv[])
   Mesh<T> tensile;
 
   // Material Properties
-  T E = 2000;  // Pa
-  T rho = 7.8; // kg/m3
+  T E = 200E6;  // Pa
+  T rho = 7800; // kg/m3
   T nu = 0.25;
   T beta = 0.0;
   T H = 10;
@@ -41,14 +41,14 @@ int main(int argc, char *argv[])
   // Set the number of degrees of freedom
 
   // Position and velocity in x, y, z
-  T init_position[] = {0.1, 0.1, 0.1};
-  T init_velocity[] = {0, 0.0, -0.1};
+  T init_position[] = {0.1, 0.1, 0.2};
+  T init_velocity[] = {0, 0.0, -0.5};
 
   const int normal = 1;
   std::string wall_name = "Wall";
   T location = 0.0999;
-  double dt = 0.00005;
-  double time_end = 3;
+  double dt = 0.00001;
+  double time_end = 0.168;
 
   Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);
@@ -56,36 +56,12 @@ int main(int argc, char *argv[])
   Dynamics<T, Basis, Analysis> dyna(&tensile, &material, &w);
   dyna.initialize(init_position, init_velocity);
 
+  // Solve loop with total timer
+  auto start = std::chrono::high_resolution_clock::now();
   dyna.solve(dt, time_end);
-
-  // BLAS test
-  // T matA[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-  // T matB[] = {1, 2, 3};
-  // T dimA = 3;
-  // T dimB = 5;
-
-  // T result[5];
-  // memset(result, 0, 5 * sizeof(T));
-  // cblas_dgemv(CblasRowMajor, CblasTrans, dimA, dimB, 1.0, matA, dimB, matB,
-  // 1,
-  //             0.0, result, 1);
-  // // Print the values of result
-  // for (int i = 0; i < 5; i++) {
-  //   printf("result[%d] = %f\n", i, result[i]);
-  // }
-
-  // T matA2[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-  // T matB2[] = {1, 2, 3};
-  // T dimA2 = 5;
-  // T dimB2 = 3;
-
-  // memset(result, 0, 5 * sizeof(T));
-  // cblas_dgemv(CblasRowMajor, CblasNoTrans, dimA2, dimB2, 1.0, matA2, dimB2,
-  //             matB2, 1, 0.0, result, 1);
-  // // Print the values of result
-  // for (int i = 0; i < 5; i++) {
-  //   printf("result[%d] = %f\n", i, result[i]);
-  // }
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = end - start;
+  std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
 
   return 0;
 }

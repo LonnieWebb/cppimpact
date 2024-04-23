@@ -45,7 +45,7 @@ public:
         if (wall_distance < 0.0)
         {
           global_acc[3 * (node_idx) + dim] +=
-              -1 * (1 / node_mass[dim]) * stiffness * wall_distance * normal;
+              -1 * (1 / node_mass[dim]) * 200E6 * wall_distance * normal;
         }
       }
     }
