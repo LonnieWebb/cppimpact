@@ -249,9 +249,13 @@ class Dynamics {
     // a. A0 = (Fext - Fint(U0))/M
     // Loop over all elements
 
+    // TODO: this is hard-coded for now because nodes_per_element = 10 and
+    // num_quadrature_pts = 5 and 64 > 50, need to properly determine this value
+    // to generalize the code
+    constexpr int threads_per_block = 64;
     compute_f_internal<T, dof_per_element, nodes_per_element>
-        <<<mesh->num_elements, 32>>>(material->rho, d_element_nodes,
-                                     d_global_xloc, d_global_dof, d_vel);
+        <<<mesh->num_elements, threads_per_block>>>(
+            material->rho, d_element_nodes, d_global_xloc, d_global_dof, d_vel);
 
 #if 0
 
