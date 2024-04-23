@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
   std::string wall_name = "Wall";
   T location = 0.0999;
   double dt = 0.00001;
-  double time_end = 0.168;
+  double time_end = 0.178;
   int export_interval = 50;
 
   Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
