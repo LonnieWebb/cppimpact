@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
   T location = 0.0999;
   double dt = 0.00001;
   double time_end = 0.168;
+  int export_interval = 50;
 
   Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);
@@ -57,7 +58,7 @@ int main(int argc, char *argv[]) {
 
   // Solve loop with total timer
   auto start = std::chrono::high_resolution_clock::now();
-  dyna.solve(dt, time_end);
+  dyna.solve(dt, time_end, export_interval);
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
