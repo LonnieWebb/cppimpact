@@ -5,7 +5,7 @@ class TetrahedralQuadrature {
   static const int num_quadrature_pts = 5;
 
   template <typename T>
-  static T get_quadrature_pt(int k, T pt[]) {
+  static __host__ __device__ T get_quadrature_pt(int k, T pt[]) {
     if (k == 0) {
       pt[0] = 0.25;
       pt[1] = 0.25;
@@ -42,7 +42,7 @@ class TetrahedralBasis {
   static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = 10;
 
-  static void eval_basis_grad(const T pt[], T Nxi[]) {
+  static __host__ __device__ void eval_basis_grad(const T pt[], T Nxi[]) {
     // Corner node derivatives
     Nxi[0] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
     Nxi[1] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
@@ -87,7 +87,8 @@ class TetrahedralBasis {
   }
 
   template <int dim>
-  static void eval_grad(const T pt[], const T dof[], T grad[]) {
+  static __host__ __device__ void eval_grad(const T pt[], const T dof[],
+                                            T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
@@ -107,7 +108,8 @@ class TetrahedralBasis {
   }
 
   template <int dim>
-  static void add_grad(const T pt[], const T coef[], T res[]) {
+  static __host__ __device__ void add_grad(const T pt[], const T coef[],
+                                           T res[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
@@ -121,7 +123,7 @@ class TetrahedralBasis {
     }
   }
 
-  static void eval_basis_PU(const T pt[], T N[]) {
+  static __host__ __device__ void eval_basis_PU(const T pt[], T N[]) {
     // PU functions from https://doi.org/10.1016/j.enganabound.2019.04.018
     T L1 = 1.0 - pt[0] - pt[1] - pt[2];
     T L2 = pt[0];
@@ -139,7 +141,8 @@ class TetrahedralBasis {
     N[9] = 2 * L1 * L4;  // 7 from paper
   }
 
-  static void calculate_B_matrix(const T Jinv[], const T *pt, T B[]) {
+  static __host__ __device__ void calculate_B_matrix(const T Jinv[],
+                                                     const T *pt, T B[]) {
     // Assuming Nxi is in element coordinates and has dimensions [spatial_dim *
     // nodes_per_element] B matrix should have dimensions [6 *
     // (3*nodes_per_element)], flattened into 1D array
@@ -183,8 +186,8 @@ class TetrahedralBasis {
   }
 
   template <int dof_per_node>
-  static void calculate_D_matrix(BaseMaterial<T, dof_per_node> *material,
-                                 T *D_matrix) {
+  static __host__ __device__ void calculate_D_matrix(
+      BaseMaterial<T, dof_per_node> *material, T *D_matrix) {
     // Set diagonal components
     D_matrix[0 * 6 + 0] = D_matrix[1 * 6 + 1] = D_matrix[2 * 6 + 2] =
         1 - material->nu;

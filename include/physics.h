@@ -2,8 +2,7 @@
 #include <cmath>
 
 template <typename T>
-inline T inv3x3(const T A[], T Ainv[])
-{
+__host__ __device__ inline T inv3x3(const T A[], T Ainv[]) {
   T det =
       (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
        A[6] * (A[1] * A[5] - A[2] * A[4]));
@@ -25,25 +24,23 @@ inline T inv3x3(const T A[], T Ainv[])
 }
 
 template <typename T>
-inline void transpose3x3(const T A[], T At[])
-{
+__host__ __device__ inline void transpose3x3(const T A[], T At[]) {
   // The diagonal elements are the same for the matrix and its transpose.
-  At[0] = A[0]; // Row 1, Col 1
-  At[4] = A[4]; // Row 2, Col 2
-  At[8] = A[8]; // Row 3, Col 3
+  At[0] = A[0];  // Row 1, Col 1
+  At[4] = A[4];  // Row 2, Col 2
+  At[8] = A[8];  // Row 3, Col 3
 
   // Transpose the off-diagonal elements.
-  At[1] = A[3]; // Row 1, Col 2 becomes Row 2, Col 1
-  At[2] = A[6]; // Row 1, Col 3 becomes Row 3, Col 1
-  At[3] = A[1]; // Row 2, Col 1 becomes Row 1, Col 2
-  At[5] = A[7]; // Row 2, Col 3 becomes Row 3, Col 2
-  At[6] = A[2]; // Row 3, Col 1 becomes Row 1, Col 3
-  At[7] = A[5]; // Row 3, Col 2 becomes Row 2, Col 3
+  At[1] = A[3];  // Row 1, Col 2 becomes Row 2, Col 1
+  At[2] = A[6];  // Row 1, Col 3 becomes Row 3, Col 1
+  At[3] = A[1];  // Row 2, Col 1 becomes Row 1, Col 2
+  At[5] = A[7];  // Row 2, Col 3 becomes Row 3, Col 2
+  At[6] = A[2];  // Row 3, Col 1 becomes Row 1, Col 3
+  At[7] = A[5];  // Row 3, Col 2 becomes Row 2, Col 3
 }
 
 template <typename T>
-inline void mat3x3MatMult(const T A[], const T B[], T C[])
-{
+__host__ __device__ inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
   C[6] = A[6] * B[0] + A[7] * B[3] + A[8] * B[6];
@@ -58,8 +55,8 @@ inline void mat3x3MatMult(const T A[], const T B[], T C[])
 }
 
 template <typename T>
-inline void mat3x3MatTransMult(const T A[], const T B[], T C[])
-{
+__host__ __device__ inline void mat3x3MatTransMult(const T A[], const T B[],
+                                                   T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
   C[6] = A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
@@ -74,16 +71,14 @@ inline void mat3x3MatTransMult(const T A[], const T B[], T C[])
 }
 
 template <typename T>
-inline T det3x3(const T A[])
-{
+__host__ __device__ inline T det3x3(const T A[]) {
   return (A[8] * (A[0] * A[4] - A[3] * A[1]) -
           A[7] * (A[0] * A[5] - A[3] * A[2]) +
           A[6] * (A[1] * A[5] - A[2] * A[4]));
 }
 
 template <typename T>
-inline void det3x3Sens(const T A[], T Ad[])
-{
+__host__ __device__ inline void det3x3Sens(const T A[], T Ad[]) {
   Ad[0] = A[8] * A[4] - A[7] * A[5];
   Ad[1] = A[6] * A[5] - A[8] * A[3];
   Ad[2] = A[7] * A[3] - A[6] * A[4];
@@ -98,8 +93,7 @@ inline void det3x3Sens(const T A[], T Ad[])
 }
 
 template <typename T>
-inline void addDet3x3Sens(const T s, const T A[], T Ad[])
-{
+__host__ __device__ inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
   Ad[0] += s * (A[8] * A[4] - A[7] * A[5]);
   Ad[1] += s * (A[6] * A[5] - A[8] * A[3]);
   Ad[2] += s * (A[7] * A[3] - A[6] * A[4]);
@@ -114,8 +108,7 @@ inline void addDet3x3Sens(const T s, const T A[], T Ad[])
 }
 
 template <typename T>
-inline void det3x32ndSens(const T s, const T A[], T Ad[])
-{
+__host__ __device__ inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
   // Ad[0] = s*(A[8]*A[4] - A[7]*A[5]);
   Ad[0] = 0.0;
   Ad[1] = 0.0;
@@ -226,14 +219,13 @@ inline void det3x32ndSens(const T s, const T A[], T Ad[])
 }
 
 template <typename T>
-class NeohookeanPhysics
-{
-public:
+class NeohookeanPhysics {
+ public:
   static const int spatial_dim = 3;
   static const int dof_per_node = 3;
 
-  static T energy(T weight, const T J[], const T grad[], const T C1, const T D1)
-  {
+  static T energy(T weight, const T J[], const T grad[], const T C1,
+                  const T D1) {
     // Compute the inverse and determinant of the Jacobian matrix
     T Jinv[spatial_dim * spatial_dim];
     T detJ = inv3x3(J, Jinv);
@@ -260,8 +252,8 @@ public:
     return weight * detJ * energy_density;
   }
 
-  static void residual(T weight, const T J[], const T grad[], T coef[], const T C1, const T D1)
-  {
+  static void residual(T weight, const T J[], const T grad[], T coef[],
+                       const T C1, const T D1) {
     // Compute the inverse and determinant of the Jacobian matrix
     T Jinv[spatial_dim * spatial_dim];
     T detJ = inv3x3(J, Jinv);
@@ -311,8 +303,7 @@ public:
   }
 
   static void jacobian(T weight, const T J[], const T grad[], const T direct[],
-                       T coef[], const T C1, const T D1)
-  {
+                       T coef[], const T C1, const T D1) {
     // Compute the inverse and determinant of the Jacobian matrix
     T Jinv[spatial_dim * spatial_dim];
     T detJ = inv3x3(J, Jinv);
@@ -352,16 +343,14 @@ public:
 
     T Jac[9 * 9];
     det3x32ndSens(bdetF, F, Jac);
-    for (int i = 0; i < 9; i++)
-    {
+    for (int i = 0; i < 9; i++) {
       Jac[10 * i] += 2.0 * bI1;
     }
 
     T t[9];
     det3x3Sens(F, t);
 
-    for (int i = 0; i < 9; i++)
-    {
+    for (int i = 0; i < 9; i++) {
       addDet3x3Sens(b2detF * t[i], F, &Jac[9 * i]);
     }
 
@@ -369,11 +358,9 @@ public:
     T cphys[spatial_dim * dof_per_node];
 
     // Compute the Jacobian-vector product
-    for (int i = 0; i < 9; i++)
-    {
+    for (int i = 0; i < 9; i++) {
       cphys[i] = 0.0;
-      for (int j = 0; j < 9; j++)
-      {
+      for (int j = 0; j < 9; j++) {
         cphys[i] += Jac[9 * i + j] * dirphys[j];
       }
     }
@@ -382,8 +369,5 @@ public:
     mat3x3MatTransMult(cphys, Jinv, coef);
   }
 
-  static void test_func()
-  {
-    printf("Test func \n");
-  }
+  static void test_func() { printf("Test func \n"); }
 };

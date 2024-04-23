@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "basematerial.h"
+#include "dynamics_kernels.cuh"
 #include "mesh.h"
 #include "wall.h"
 
@@ -186,13 +187,41 @@ class Dynamics {
   //   }
   // }
 
-  void allocation() {}
+  void allocate() {
+    // allocate global data on device
+    cudaMalloc(&d_global_dof, sizeof(T) * ndof);
+    cudaMalloc(&d_global_acc, sizeof(T) * ndof);
+    cudaMalloc(&d_global_mass, sizeof(T) * ndof);
+    cudaMalloc(&d_vel, sizeof(T) * ndof);
+    cudaMalloc(&d_global_xloc, sizeof(T) * ndof);
+    cudaMalloc(&d_element_nodes,
+               sizeof(int) * nodes_per_element * mesh->num_elements);
 
-  void data_initialization() {}
+    cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
+    cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
+    cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
+    cudaMemset(d_vel, T(0.0), sizeof(T) * ndof);
 
-  void deallocation() {}
+    cudaMemcpy(d_global_xloc, mesh->xloc, ndof * sizeof(T),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_element_nodes, mesh->element_nodes,
+               sizeof(int) * nodes_per_element * mesh->num_elements,
+               cudaMemcpyHostToDevice);
+  }
+
+  void deallocate() {
+    cudaFree(d_global_dof);
+    cudaFree(d_global_acc);
+    cudaFree(d_global_mass);
+    cudaFree(d_vel);
+    cudaFree(d_global_xloc);
+    cudaFree(d_element_nodes);
+  }
 
   void solve(double dt, double time_end) {
+    // Allocate global device data
+    allocate();
+
     // Perform a dynamic analysis. The algorithm is staggered as follows:
     // This assumes that the initial u, v, a and fext are already initialized
     // at nodes.
@@ -215,94 +244,16 @@ class Dynamics {
     constexpr int dof_per_element = nodes_per_element * spatial_dim;
     printf("Solving dynamics\n");
 
-    // Global Variables
-    const T element_density = material->rho;
-    T *global_dof = new T[ndof];
-    int *element_nodes = mesh->element_nodes;
-
-    // Copy data from mesh->xloc to global_dof
-    // mesh->xloc will store initial positions
-    memcpy(global_xloc, mesh->xloc, ndof * sizeof(T));
-    T *vel_i = new T[ndof];
-    T *global_acc = new T[ndof];
-    T *global_mass = new T[ndof];
-
-    for (int i = 0; i < ndof; i++) {
-      global_dof[i] = 0.0;
-      vel_i[i] = 0.0;
-      global_acc[i] = 0.0;
-      global_mass[i] = 0.0;
-    }
-
-    // Per element variables
-    T *element_mass_matrix_diagonals = new T[dof_per_element];
-    T *element_xloc = new T[dof_per_element];
-    T *element_dof = new T[dof_per_element];
-    T *element_vel = new T[dof_per_element];
-    T *element_acc = new T[dof_per_element];
-    T *element_internal_forces = new T[dof_per_element];
-
-    int *this_element_nodes = new int[nodes_per_element];
-
     double time = 0.0;
-    // T element_density;
 
     // a. A0 = (Fext - Fint(U0))/M
     // Loop over all elements
-    for (int i = 0; i < mesh->num_elements; i++) {
-      for (int k = 0; k < dof_per_element; k++) {
-        element_mass_matrix_diagonals[k] = 0.0;
-        element_xloc[k] = 0.0;
-        element_dof[k] = 0.0;
-        element_acc[k] = 0.0;
-        element_vel[k] = 0.0;
-        element_internal_forces[k] = 0.0;
-      }
 
-      // element_density = element_densities[i];
+    compute_f_internal<T, dof_per_element, nodes_per_element>
+        <<<mesh->num_elements, 32>>>(material->rho, d_element_nodes,
+                                     d_global_xloc, d_global_dof, d_vel);
 
-      // Get the nodes of this element
-      for (int j = 0; j < nodes_per_element; j++) {
-        this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-      }
-
-      // Get the element locations
-      Analysis::template get_element_dof<spatial_dim>(
-          this_element_nodes, global_xloc, element_xloc);
-
-      // Get the element degrees of freedom
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes,
-                                                      global_dof, element_dof);
-      // Get the element velocities
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
-                                                      element_vel);
-
-      // Calculate element mass matrix
-      Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
-                                    element_mass_matrix_diagonals, i);
-
-      T Mr_inv[dof_per_element];
-      for (int k = 0; k < dof_per_element; k++) {
-        Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
-      }
-
-      Analysis::calculate_f_internal(element_xloc, element_dof,
-                                     element_internal_forces, material);
-
-      // Calculate element acceleration
-      for (int j = 0; j < dof_per_element; j++) {
-        element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
-      }
-
-      // assemble global acceleration
-      for (int j = 0; j < nodes_per_element; j++) {
-        int node = this_element_nodes[j];
-
-        global_acc[3 * node] += element_acc[3 * j];
-        global_acc[3 * node + 1] += element_acc[3 * j + 1];
-        global_acc[3 * node + 2] += element_acc[3 * j + 2];
-      }
-    }
+#if 0
 
     // Add contact forces and body forces
     for (int i = 0; i < mesh->num_nodes; i++) {
@@ -477,5 +428,19 @@ class Dynamics {
       time += dt;
       timestep += 1;
     }
+#endif
+    deallocate();
   }
+
+ private:
+  // Host data pointers
+
+  // Device data pointers
+  T *d_global_dof = nullptr;
+  T *d_global_acc = nullptr;
+  T *d_global_mass = nullptr;
+  T *d_vel = nullptr;
+  T *d_global_xloc = nullptr;
+
+  int *d_element_nodes = nullptr;
 };

@@ -8,10 +8,12 @@ cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 project(NEOHOOKEAN_CUDA LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_ARCHITECTURES 89)
+set(GPU_ARCHS "80") 
+if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
+  set(GPU_ARCHS "${GPU_ARCHS};80")
+endif()
 
 add_compile_options(-g -G)
-
 
 add_executable(test test.cu)
 # add_executable(derivatives_verification derivatives_verification.cu)
