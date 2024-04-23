@@ -1,5 +1,5 @@
 #include <cblas.h>
-#include <cuda_runtime.h>
+
 #include <chrono>
 #include <string>
 
@@ -11,8 +11,7 @@
 #include "include/tetrahedral.h"
 #include "include/wall.h"
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   using T = double;
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
@@ -27,8 +26,8 @@ int main(int argc, char *argv[])
   Mesh<T> tensile;
 
   // Material Properties
-  T E = 200E6;  // Pa
-  T rho = 7800; // kg/m3
+  T E = 200E6;   // Pa
+  T rho = 7800;  // kg/m3
   T nu = 0.25;
   T beta = 0.0;
   T H = 10;

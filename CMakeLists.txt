@@ -5,23 +5,23 @@ endif()
 
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
-project(NEOHOOKEAN_CUDA LANGUAGES CXX CUDA)
+project(CPPImpact LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_ARCHITECTURES 89)
+# set(CMAKE_CUDA_ARCHITECTURES 89)
 
-add_compile_options(-g -G)
+add_compile_options(-g)
 
 
-add_executable(test test.cu)
+add_executable(test test.cpp)
 # add_executable(derivatives_verification derivatives_verification.cu)
 
-set_target_properties(test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+# set_target_properties(test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 # set_target_properties(derivatives_verification PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 # target_compile_options(derivatives_verification PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
 # Find CUDA Toolkit
-find_package(CUDAToolkit REQUIRED)
+# find_package(CUDAToolkit REQUIRED)
 # Find LAPACK/BLAS
 find_package(LAPACK REQUIRED)
 
@@ -29,4 +29,4 @@ find_package(LAPACK REQUIRED)
 target_link_libraries(test ${LAPACK_LIBRARIES})
 
 # Link CUDA Toolkit libraries (if needed)
-target_link_libraries(test CUDA::cudart)
+# target_link_libraries(test CUDA::cudart)
