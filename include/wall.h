@@ -2,9 +2,8 @@
 #include <string>
 
 template <typename T, int dim, class Basis>
-class Wall
-{
-public:
+class Wall {
+ public:
   // dim denotes the plane which the wall is parallel with (0, 1, 2) for (x, y,
   // z) respectively. normal denotes which way direction the surface of the wall
   // faces 1 for positive x/y/z, -1 for negative x/y/z
@@ -25,8 +24,7 @@ public:
         stiffness(stiffness),
         slave_node_indices(slave_node_indices),
         num_slave_nodes(num_slave_nodes),
-        normal(normal)
-  {
+        normal(normal) {
     // for (int i = 0; i < num_slave_nodes; i++) {
     //   std::cout << "slave_node_indices[i]: " << slave_node_indices[i]
     //             << std::endl;
@@ -35,15 +33,11 @@ public:
 
   ~Wall() {}
 
-  void detect_contact(T *global_acc, int node_idx, T *node_pos, T *node_mass)
-  {
-    for (int j = 0; j < num_slave_nodes; j++)
-    {
-      if (node_idx == slave_node_indices[j])
-      {
+  void detect_contact(T *global_acc, int node_idx, T *node_pos, T *node_mass) {
+    for (int j = 0; j < num_slave_nodes; j++) {
+      if (node_idx == slave_node_indices[j]) {
         T wall_distance = (node_pos[dim] - location) * normal;
-        if (wall_distance < 0.0)
-        {
+        if (wall_distance < 0.0) {
           global_acc[3 * (node_idx) + dim] +=
               -1 * (1 / node_mass[dim]) * 200E6 * wall_distance * normal;
         }
