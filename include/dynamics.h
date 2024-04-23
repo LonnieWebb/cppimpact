@@ -23,6 +23,9 @@ class Dynamics {
     T x = global_xloc[3 * node_id];
     T y = global_xloc[3 * node_id + 1];
     T z = global_xloc[3 * node_id + 2];
+    T vix = vel_i[3 * node_id];
+    T viy = vel_i[3 * node_id + 1];
+    T viz = vel_i[3 * node_id + 2];
     T vx = vel[3 * node_id];
     T vy = vel[3 * node_id + 1];
     T vz = vel[3 * node_id + 2];
@@ -34,7 +37,8 @@ class Dynamics {
     T mz = global_mass[3 * node_id + 2];
 
     stream << "  Position: (" << x << ", " << y << ", " << z << ")\n"
-           << "  Velocity: (" << vx << ", " << vy << ", " << vz << ")\n"
+           << "  Velocity: (" << vix << ", " << viy << ", " << viz << ")\n"
+           << "  Velocity_i.5: (" << vx << ", " << vy << ", " << vz << ")\n"
            << "  Acceleration: (" << ax << ", " << ay << ", " << az << ")\n"
            << "  Mass: (" << mx << ", " << my << ", " << mz << ")\n";
   }
@@ -535,7 +539,7 @@ class Dynamics {
         // TODO: only run this on export steps
         vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
       }
-      probe_node(79);
+      probe_node(27);
       probe_element(5);
       if (timestep % export_interval == 0) {
         export_to_vtk();
