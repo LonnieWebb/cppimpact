@@ -13,12 +13,17 @@ if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
   set(GPU_ARCHS "${GPU_ARCHS};80")
 endif()
 
-add_compile_options(-g -G)
+add_compile_options(-g)
 
-add_executable(test test.cu)
+add_executable(gpu_test test.cu)
+add_executable(cpu_test test.cu)
 # add_executable(derivatives_verification derivatives_verification.cu)
 
-set_target_properties(test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_compile_definitions(gpu_test PRIVATE -DCPPIMPACT_CUDA_BACKEND)
+
+target_compile_options(gpu_test PRIVATE -G)  # device debug
+
+set_target_properties(gpu_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 # set_target_properties(derivatives_verification PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 # target_compile_options(derivatives_verification PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
@@ -28,7 +33,8 @@ find_package(CUDAToolkit REQUIRED)
 find_package(LAPACK REQUIRED)
 
 # Link LAPACK/BLAS libraries
-target_link_libraries(test ${LAPACK_LIBRARIES})
+target_link_libraries(gpu_test ${LAPACK_LIBRARIES})
+target_link_libraries(cpu_test ${LAPACK_LIBRARIES})
 
 # Link CUDA Toolkit libraries (if needed)
-target_link_libraries(test CUDA::cudart)
+target_link_libraries(gpu_test CUDA::cudart)

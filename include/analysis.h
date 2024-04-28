@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cblas.h>
-#include <cuda_runtime.h>
+#include "cppimpact_defs.h"
 
 #include "basematerial.h"
 #include "mesh.h"
@@ -40,6 +40,7 @@ void multiply_BT_node_P(const T *B_node, const T *P, T *BP_node) {
   }
 }
 
+#ifdef CPPIMPACT_CUDA_BACKEND
 template <typename T, const int nodes_per_element, const int dof_per_node,
           const int spatial_dim>
 __global__ void energy_kernel(const int *element_nodes, const T *xloc,
@@ -147,6 +148,7 @@ __global__ void residual_kernel(int element_nodes[], const T xloc[],
         &element_nodes[nodes_per_element * element_index], element_res, res);
   }
 }
+#endif
 
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis {
@@ -165,7 +167,7 @@ class FEAnalysis {
   static constexpr int dof_per_element = dof_per_node * nodes_per_element;
 
   template <int ndof>
-  static __device__ __host__ void get_element_dof(const int nodes[],
+  static CPPIMPACT_FUNCTION void get_element_dof(const int nodes[],
                                                   const T dof[],
                                                   T element_dof[]) {
     for (int j = 0; j < nodes_per_element; j++) {
@@ -176,6 +178,7 @@ class FEAnalysis {
     }
   }
 
+#ifdef CPPIMPACT_CUDA_BACKEND
   template <int ndof, int dof_per_element, int dof_per_node>
   static __device__ void get_element_dof(int tid, const int nodes[],
                                          const T dof[], T element_dof[]) {
@@ -187,6 +190,7 @@ class FEAnalysis {
       element_dof[tid] = dof[ndof * node + k];
     }
   }
+#endif
 
   template <int ndof>
   static void add_element_res(const int nodes[], const T element_res[],
@@ -199,6 +203,8 @@ class FEAnalysis {
     }
   }
 
+
+#ifdef CPPIMPACT_CUDA_BACKEND
   static T energy(int num_elements, int element_nodes[], T xloc[], T dof[],
                   const int num_nodes, T C1, T D1) {
     cudaError_t err;
@@ -273,6 +279,7 @@ class FEAnalysis {
     return total_energy;
   }
 
+
   static void residual(int num_elements, int num_nodes,
                        const int element_nodes[], const T xloc[], const T dof[],
                        T res[], T C1, T D1) {
@@ -332,6 +339,7 @@ class FEAnalysis {
     cudaFree(d_D1);
     cudaFree(d_res);
   }
+#endif
 
   static void jacobian_product(int num_elements, const int element_nodes[],
                                const T xloc[], const T dof[], const T direct[],
@@ -390,6 +398,8 @@ class FEAnalysis {
     }
   }
 
+
+#ifdef CPPIMPACT_CUDA_BACKEND
   static __device__ void element_mass_matrix(int tid, const T element_density,
                                              const T *element_xloc,
                                              const T *element_dof,
@@ -429,6 +439,7 @@ class FEAnalysis {
       element_mass_matrix_diagonals[3 * i + k] = m_i[i];
     __syncthreads();
   }
+#endif
 
   static void element_mass_matrix(const T element_density,
                                   const T *element_xloc, const T *element_dof,

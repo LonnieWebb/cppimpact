@@ -1,8 +1,10 @@
 #pragma once
 #include <cmath>
 
+#include "cppimpact_defs.h"
+
 template <typename T>
-__host__ __device__ inline T inv3x3(const T A[], T Ainv[]) {
+CPPIMPACT_FUNCTION inline T inv3x3(const T A[], T Ainv[]) {
   T det =
       (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
        A[6] * (A[1] * A[5] - A[2] * A[4]));
@@ -24,7 +26,7 @@ __host__ __device__ inline T inv3x3(const T A[], T Ainv[]) {
 }
 
 template <typename T>
-__host__ __device__ inline void transpose3x3(const T A[], T At[]) {
+CPPIMPACT_FUNCTION inline void transpose3x3(const T A[], T At[]) {
   // The diagonal elements are the same for the matrix and its transpose.
   At[0] = A[0];  // Row 1, Col 1
   At[4] = A[4];  // Row 2, Col 2
@@ -40,7 +42,7 @@ __host__ __device__ inline void transpose3x3(const T A[], T At[]) {
 }
 
 template <typename T>
-__host__ __device__ inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
+CPPIMPACT_FUNCTION inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
   C[6] = A[6] * B[0] + A[7] * B[3] + A[8] * B[6];
@@ -55,7 +57,7 @@ __host__ __device__ inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
 }
 
 template <typename T>
-__host__ __device__ inline void mat3x3MatTransMult(const T A[], const T B[],
+CPPIMPACT_FUNCTION inline void mat3x3MatTransMult(const T A[], const T B[],
                                                    T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
@@ -71,14 +73,14 @@ __host__ __device__ inline void mat3x3MatTransMult(const T A[], const T B[],
 }
 
 template <typename T>
-__host__ __device__ inline T det3x3(const T A[]) {
+CPPIMPACT_FUNCTION inline T det3x3(const T A[]) {
   return (A[8] * (A[0] * A[4] - A[3] * A[1]) -
           A[7] * (A[0] * A[5] - A[3] * A[2]) +
           A[6] * (A[1] * A[5] - A[2] * A[4]));
 }
 
 template <typename T>
-__host__ __device__ inline void det3x3Sens(const T A[], T Ad[]) {
+CPPIMPACT_FUNCTION inline void det3x3Sens(const T A[], T Ad[]) {
   Ad[0] = A[8] * A[4] - A[7] * A[5];
   Ad[1] = A[6] * A[5] - A[8] * A[3];
   Ad[2] = A[7] * A[3] - A[6] * A[4];
@@ -93,7 +95,7 @@ __host__ __device__ inline void det3x3Sens(const T A[], T Ad[]) {
 }
 
 template <typename T>
-__host__ __device__ inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
+CPPIMPACT_FUNCTION inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
   Ad[0] += s * (A[8] * A[4] - A[7] * A[5]);
   Ad[1] += s * (A[6] * A[5] - A[8] * A[3]);
   Ad[2] += s * (A[7] * A[3] - A[6] * A[4]);
@@ -108,7 +110,7 @@ __host__ __device__ inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
 }
 
 template <typename T>
-__host__ __device__ inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
+CPPIMPACT_FUNCTION inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
   // Ad[0] = s*(A[8]*A[4] - A[7]*A[5]);
   Ad[0] = 0.0;
   Ad[1] = 0.0;
@@ -131,7 +133,6 @@ __host__ __device__ inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
   Ad[6] = s * A[5];
   Ad[7] = 0.0;
   Ad[8] = -s * A[3];
-  ;
   Ad += 9;
 
   // Ad[2] += s*(A[7]*A[3] - A[6]*A[4]);

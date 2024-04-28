@@ -66,7 +66,7 @@ class Dynamics {
   void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i) {
     if (timestep % 50 != 0) return;
 
-    const std::string directory = "../output";
+    const std::string directory = "../cpu_output";
     const std::string filename =
         directory + "/simulation_" + std::to_string(timestep) + ".vtk";
     std::ofstream vtkFile(filename);
@@ -273,7 +273,7 @@ class Dynamics {
 
       // Calculate element mass matrix
       Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
-                                    element_mass_matrix_diagonals, i);
+                                    element_mass_matrix_diagonals);
 
       T Mr_inv[dof_per_element];
       for (int k = 0; k < dof_per_element; k++) {
@@ -368,7 +368,7 @@ class Dynamics {
         // Calculate the element mass matrix
         Analysis::element_mass_matrix(element_density, element_xloc,
                                       element_dof,
-                                      element_mass_matrix_diagonals, i);
+                                      element_mass_matrix_diagonals);
 
         // assemble global acceleration
         for (int j = 0; j < nodes_per_element; j++) {

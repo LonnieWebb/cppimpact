@@ -1,26 +1,46 @@
 #include <cblas.h>
-#include <cuda_runtime.h>
 
 #include <chrono>
 #include <string>
 
 #include "include/analysis.h"
-#include "include/dynamics.cuh"
+#include "include/cppimpact_defs.h"
 #include "include/elastoplastic.h"
 #include "include/mesh.h"
 #include "include/physics.h"
 #include "include/tetrahedral.h"
 #include "include/wall.h"
 
+#ifdef CPPIMPACT_CUDA_BACKEND
+#include "include/dynamics.cuh"
+#else
+#include "include/dynamics.h"
+#endif
+
 int main(int argc, char *argv[]) {
-  // using T = double;
+#ifdef CPPIMPACT_CUDA_BACKEND
   using T = float;
+#else
+  using T = double;
+#endif
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
-  const int dof_per_node = 3;
+  constexpr int dof_per_node = 3;
+
+  bool smoke_test = false;
+  if (argc > 1) {
+    if ("-h" == std::string(argv[1]) or "--help" == std::string(argv[1])) {
+      std::printf("Usage: ./gpu_test.cu [--smoke]\n");
+      exit(0);
+    }
+
+    if ("--smoke" == std::string(argv[1])) {
+      smoke_test = true;
+    }
+  }
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
@@ -49,7 +69,7 @@ int main(int argc, char *argv[]) {
   std::string wall_name = "Wall";
   T location = 0.0999;
   double dt = 0.00001;
-  double time_end = 0.168;
+  double time_end = smoke_test ? dt * 100 : 0.168;
 
   Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);
