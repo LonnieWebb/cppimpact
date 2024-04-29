@@ -215,13 +215,14 @@ class Dynamics {
     T *global_dof = new T[ndof];
     int *element_nodes = mesh->element_nodes;
 
-    // Copy data from mesh->xloc to global_dof
-    // mesh->xloc will store initial positions
-    memcpy(global_xloc, mesh->xloc, ndof * sizeof(T));
+    // Allocate global data
     T *vel_i = new T[ndof];
     T *global_acc = new T[ndof];
     T *global_mass = new T[ndof];
 
+    // Initialize global data
+    memcpy(global_xloc, mesh->xloc,
+           ndof * sizeof(T));  // mesh->xloc will store initial positions
     for (int i = 0; i < ndof; i++) {
       global_dof[i] = 0.0;
       vel_i[i] = 0.0;
@@ -239,9 +240,6 @@ class Dynamics {
 
     int *this_element_nodes = new int[nodes_per_element];
 
-    double time = 0.0;
-    // T element_density;
-
     // a. A0 = (Fext - Fint(U0))/M
     // Loop over all elements
     for (int i = 0; i < mesh->num_elements; i++) {
@@ -250,11 +248,8 @@ class Dynamics {
         element_xloc[k] = 0.0;
         element_dof[k] = 0.0;
         element_acc[k] = 0.0;
-        element_vel[k] = 0.0;
         element_internal_forces[k] = 0.0;
       }
-
-      // element_density = element_densities[i];
 
       // Get the nodes of this element
       for (int j = 0; j < nodes_per_element; j++) {
@@ -268,9 +263,6 @@ class Dynamics {
       // Get the element degrees of freedom
       Analysis::template get_element_dof<spatial_dim>(this_element_nodes,
                                                       global_dof, element_dof);
-      // Get the element velocities
-      Analysis::template get_element_dof<spatial_dim>(this_element_nodes, vel,
-                                                      element_vel);
 
       // Calculate element mass matrix
       Analysis::element_mass_matrix(element_density, element_xloc, element_dof,
@@ -328,14 +320,33 @@ class Dynamics {
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
+    double time = 0.0;
     int timestep = 0;
 
     while (time <= time_end) {
       printf("Time: %f\n", time);
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
           mesh->num_nodes, mesh->num_elements, ndof, dt, element_density,
-          material, wall, element_nodes, global_xloc, global_acc, global_dof,
-          global_mass, vel, vel_i);
+          material, wall, element_nodes, vel, global_xloc, global_acc,
+          global_dof, global_mass);
+
+      // Compute total mass (useful?)
+      T total_mass = 0.0;
+      for (int i = 0; i < ndof; i++) {
+        total_mass += global_mass[i] / 3.0;
+      }
+
+      // 3. Compute V1.5 = V0.5 + A1*dt
+      // 3. Compute V1 = V1.5 - dt/2 * a1
+      // 4. Loop back to 1.
+
+      for (int i = 0; i < ndof; i++) {
+        global_xloc[i] += global_dof[i];
+        vel[i] += dt * global_acc[i];
+
+        // TODO: only run this on export steps
+        vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
+      }
 
       export_to_vtk(timestep, vel_i, global_acc, global_mass);
       time += dt;

@@ -9,22 +9,22 @@ template <typename T, int spatial_dim, int nodes_per_element, class Basis,
           class Analysis>
 void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
-            const int *element_nodes, T *global_xloc, T *global_acc,
-            T *global_dof, T *global_mass, T *vel, T *vel_i) {
+            const int *element_nodes, const T *vel, const T *global_xloc,
+            T *global_acc, T *global_dof, T *global_mass) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
+
+  // Zero-out states
+  memset(global_acc, 0, sizeof(T) * ndof);
+  memset(global_dof, 0, sizeof(T) * ndof);
+  memset(global_mass, 0, sizeof(T) * ndof);
 
   // Allocate element quantities
   std::vector<T> element_mass_matrix_diagonals(dof_per_element);
   std::vector<T> element_xloc(dof_per_element);
   std::vector<T> element_dof(dof_per_element);
-  std::vector<T> element_vel(dof_per_element);
   std::vector<T> element_acc(dof_per_element);
   std::vector<T> element_internal_forces(dof_per_element);
   std::vector<int> this_element_nodes(nodes_per_element);
-
-  memset(global_acc, 0, sizeof(T) * ndof);
-  memset(global_dof, 0, sizeof(T) * ndof);
-  memset(global_mass, 0, sizeof(T) * ndof);
 
   // 1. Compute U1 = U +dt*V0.5
   // Update nodal displacements
@@ -34,6 +34,7 @@ void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
 
   // 2. Compute A1 = (Fext - Fint(U1)/M
 
+  // --- Update global mass
   for (int i = 0; i < num_elements; i++) {
     // Per element variables
     for (int k = 0; k < dof_per_element; k++) {
@@ -75,7 +76,6 @@ void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
       element_mass_matrix_diagonals[k] = 0.0;
       element_xloc[k] = 0.0;
       element_dof[k] = 0.0;
-      element_vel[k] = 0.0;
       element_acc[k] = 0.0;
       element_internal_forces[k] = 0.0;
     }
@@ -138,22 +138,5 @@ void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
     // Body Forces
     int gravity_dim = 2;
     global_acc[3 * i + gravity_dim] += -9.81;
-  }
-
-  T total_mass = 0.0;
-  for (int i = 0; i < ndof; i++) {
-    total_mass += global_mass[i] / 3.0;
-  }
-
-  // 3. Compute V1.5 = V0.5 + A1*dt
-  // 3. Compute V1 = V1.5 - dt/2 * a1
-  // 4. Loop back to 1.
-
-  for (int i = 0; i < ndof; i++) {
-    global_xloc[i] += global_dof[i];
-    vel[i] += dt * global_acc[i];
-
-    // TODO: only run this on export steps
-    vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
   }
 }
