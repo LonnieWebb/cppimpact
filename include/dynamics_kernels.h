@@ -10,12 +10,11 @@ template <typename T, int spatial_dim, int nodes_per_element, class Basis,
 void update(int num_nodes, int num_elements, int ndof, T dt,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
             const int *element_nodes, const T *vel, const T *global_xloc,
-            T *global_acc, T *global_dof, T *global_mass) {
+            T *global_dof, T *global_acc, T *global_mass) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
   // Zero-out states
   memset(global_acc, 0, sizeof(T) * ndof);
-  memset(global_dof, 0, sizeof(T) * ndof);
   memset(global_mass, 0, sizeof(T) * ndof);
 
   // Allocate element quantities
@@ -26,17 +25,9 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
   std::vector<T> element_internal_forces(dof_per_element);
   std::vector<int> this_element_nodes(nodes_per_element);
 
-  // 1. Compute U1 = U +dt*V0.5
-  // Update nodal displacements
-  for (int j = 0; j < ndof; j++) {
-    global_dof[j] = dt * vel[j];
-  }
-
   // 2. Compute A1 = (Fext - Fint(U1)/M
 
-  // --- Update global mass
-  // TODO: Lonnie: looks like this part won't be used during initialization, is
-  // it ok to perform these computations anyways?
+  // Update global mass
   for (int i = 0; i < num_elements; i++) {
     // Per element variables
     for (int k = 0; k < dof_per_element; k++) {

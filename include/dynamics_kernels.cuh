@@ -72,13 +72,14 @@ __global__ void update(int num_elements, T dt,
 
   Analysis::calculate_f_internal(tid, element_xloc, element_dof,
                                  element_internal_forces, d_material);
+  __syncthreads();
+
+  // Calculate element acceleration
+  if (tid < dof_per_element) {
+    element_acc[tid] = Mr_inv * (-element_internal_forces[tid]);
+  }
 
 #if 0
-  // Calculate element acceleration
-//   for (int j = 0; j < dof_per_element; j++) {
-//     element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
-//   }
-
   // assemble global mass matrix
   for (int j = 0; j < nodes_per_element; j++) {
     int node = this_element_nodes[j];

@@ -236,7 +236,7 @@ class Dynamics {
     // Initialize states
     update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
         mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
-        element_nodes, vel, global_xloc, global_acc, global_dof, global_mass);
+        element_nodes, vel, global_xloc, global_dof, global_acc, global_mass);
 
     // b.Stagger V0 .5 = V0 + dt / 2 * a0
     // Update velocity
@@ -253,15 +253,24 @@ class Dynamics {
 
     while (time <= time_end) {
       printf("Time: %f\n", time);
+
+      memset(global_dof, 0, sizeof(T) * ndof);
+      // 1. Compute U1 = U +dt*V0.5
+      // Update nodal displacements
+      for (int j = 0; j < ndof; j++) {
+        global_dof[j] = dt * vel[j];
+      }
+
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
           mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
-          element_nodes, vel, global_xloc, global_acc, global_dof, global_mass);
+          element_nodes, vel, global_xloc, global_dof, global_acc, global_mass);
 
       // Compute total mass (useful?)
       T total_mass = 0.0;
       for (int i = 0; i < ndof; i++) {
         total_mass += global_mass[i] / 3.0;
       }
+      // printf("mass: %30.15e\n", total_mass);
 
       // 3. Compute V1.5 = V0.5 + A1*dt
       // 3. Compute V1 = V1.5 - dt/2 * a1
