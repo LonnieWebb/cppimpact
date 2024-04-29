@@ -9,11 +9,11 @@
 // Update the system states via time-stepping
 template <typename T, int spatial_dim, int nodes_per_element>
 __global__ void update(int num_elements, T dt,
-                       BaseMaterial<T, spatial_dim>* d_material,
-                       Wall<T, 2, TetrahedralBasis<T>>* d_wall,
-                       const int* d_element_nodes, const T* d_vel,
-                       const T* d_global_xloc, const T* d_global_dof,
-                       T* d_global_acc, T* d_global_mass) {
+                       BaseMaterial<T, spatial_dim> *d_material,
+                       Wall<T, 2, TetrahedralBasis<T>> *d_wall,
+                       const int *d_element_nodes, const T *d_vel,
+                       const T *d_global_xloc, const T *d_global_dof,
+                       T *d_global_acc, T *d_global_mass) {
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
@@ -76,13 +76,25 @@ __global__ void update(int num_elements, T dt,
   }
   __syncthreads();
 
+  if (tid < dof_per_element) {
+    element_mass_matrix_diagonals[tid] = 0.0;
+  }
+  __syncthreads();
+
+  // Get the element mass matrix after assembly
+  Analysis::template get_element_dof<
+      Analysis::spatial_dim, Analysis::dof_per_element, Analysis::dof_per_node>(
+      tid, this_element_nodes, d_global_mass, element_mass_matrix_diagonals);
+  __syncthreads();
+
   T Mr_inv = 0.0;
   if (tid < dof_per_element) {
     Mr_inv = 1.0 / element_mass_matrix_diagonals[tid];
   }
 
   Analysis::calculate_f_internal(tid, element_xloc, element_dof,
-                                 element_internal_forces, d_material);
+                                 element_internal_forces,
+                                 d_material);  // TODO: Fix d_material
   __syncthreads();
 
   // Calculate element acceleration
@@ -104,9 +116,9 @@ __global__ void update(int num_elements, T dt,
 // update d_global_acc
 template <typename T>
 __global__ void external_forces(int num_nodes,
-                                Wall<T, 2, TetrahedralBasis<T>>* d_wall,
-                                const T* d_global_xloc, const T* d_global_dof,
-                                const T* d_global_mass, T* d_global_acc) {
+                                Wall<T, 2, TetrahedralBasis<T>> *d_wall,
+                                const T *d_global_xloc, const T *d_global_dof,
+                                const T *d_global_mass, T *d_global_acc) {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
   int node_idx = tid * bid;

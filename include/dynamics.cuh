@@ -208,13 +208,13 @@ class Dynamics {
     cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
-    cudaMemset(d_vel, T(0.0), sizeof(T) * ndof);
 
     cudaMemcpy(d_global_xloc, mesh->xloc, ndof * sizeof(T),
                cudaMemcpyHostToDevice);
     cudaMemcpy(d_element_nodes, mesh->element_nodes,
                sizeof(int) * nodes_per_element * mesh->num_elements,
                cudaMemcpyHostToDevice);
+    cudaMemcpy(d_vel, vel, ndof * sizeof(T), cudaMemcpyHostToDevice);
 
     // Copy Material is easy for now as it doesn't contain dynamically-allocated
     // data
@@ -286,7 +286,7 @@ class Dynamics {
     cudaDeviceSynchronize();
 
     external_forces<T><<<mesh->num_nodes / 32 + 1, 32>>>(
-        mesh->num_nodes, d_wall, d_global_acc, d_global_dof, d_global_mass,
+        mesh->num_nodes, d_wall, d_global_xloc, d_global_dof, d_global_mass,
         d_global_acc);
 
     // TODO: delete this

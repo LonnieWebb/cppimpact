@@ -217,7 +217,6 @@ class Dynamics {
     T *global_dof = new T[ndof];
     T *global_acc = new T[ndof];
     T *global_mass = new T[ndof];
-
     // Initialize global data
     memcpy(global_xloc, mesh->xloc,
            ndof * sizeof(T));  // mesh->xloc will store initial positions
