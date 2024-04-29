@@ -12,7 +12,8 @@ __global__ void update(int num_elements, T dt,
                        BaseMaterial<T, spatial_dim>* d_material,
                        Wall<T, 2, TetrahedralBasis<T>>* d_wall,
                        const int* d_element_nodes, const T* d_vel,
-                       T* d_global_xloc, T* d_global_acc, T* d_global_dof) {
+                       const T* d_global_xloc, const T* d_global_dof,
+                       T* d_global_acc, T* d_global_mass) {
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
@@ -65,6 +66,16 @@ __global__ void update(int num_elements, T dt,
   Analysis::element_mass_matrix(tid, d_material->rho, element_xloc, element_dof,
                                 element_mass_matrix_diagonals);
 
+  // assemble global mass matrix
+  if (tid < dof_per_element) {
+    int j = tid / 3;  // 0 ~ nodes_per_element - 1
+    int k = tid % 3;  // 0, 1, 2
+    int node = this_element_nodes[j];
+    atomicAdd(&d_global_mass[3 * node + k],
+              element_mass_matrix_diagonals[3 * j + k]);
+  }
+  __syncthreads();
+
   T Mr_inv = 0.0;
   if (tid < dof_per_element) {
     Mr_inv = 1.0 / element_mass_matrix_diagonals[tid];
@@ -78,15 +89,48 @@ __global__ void update(int num_elements, T dt,
   if (tid < dof_per_element) {
     element_acc[tid] = Mr_inv * (-element_internal_forces[tid]);
   }
+  __syncthreads();
 
-#if 0
-  // assemble global mass matrix
-  for (int j = 0; j < nodes_per_element; j++) {
+  // assemble global acceleration
+  if (tid < dof_per_element) {
+    int j = tid / 3;  // 0 ~ nodes_per_element - 1
+    int k = tid % 3;  // 0, 1, 2
     int node = this_element_nodes[j];
-
-    global_mass[3 * node] +=  element_mass_matrix_diagonals[3 * j];
-    global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
-    global_mass[3 * node + 2] += element_mass_matrix_diagonals[3 * j + 2];
+    atomicAdd(&d_global_acc[3 * node + k], element_acc[3 * j + k]);
   }
-#endif
+  __syncthreads();
+}
+
+// update d_global_acc
+template <typename T>
+__global__ void external_forces(int num_nodes,
+                                Wall<T, 2, TetrahedralBasis<T>>* d_wall,
+                                const T* d_global_xloc, const T* d_global_dof,
+                                const T* d_global_mass, T* d_global_acc) {
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int node_idx = tid * bid;
+
+  if (node_idx < num_nodes) {
+    T node_pos[3];
+    node_pos[0] = d_global_xloc[3 * node_idx] + d_global_dof[3 * node_idx];
+    node_pos[1] =
+        d_global_xloc[3 * node_idx + 1] + d_global_dof[3 * node_idx + 1];
+    node_pos[2] =
+        d_global_xloc[3 * node_idx + 2] + d_global_dof[3 * node_idx + 2];
+
+    T node_mass[3];
+    node_mass[0] = d_global_mass[3 * node_idx];
+    node_mass[1] = d_global_mass[3 * node_idx + 1];
+    node_mass[2] = d_global_mass[3 * node_idx + 2];
+
+    d_wall->detect_contact(d_global_acc, node_idx, node_pos, node_mass);
+  }
+  __syncthreads();
+
+  if (node_idx < num_nodes) {
+    constexpr int gravity_dim = 2;
+    d_global_acc[3 * node_idx + gravity_dim] += -9.81;
+  }
+  __syncthreads();
 }

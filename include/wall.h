@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 
+#include "cppimpact_defs.h"
+
 template <typename T, int dim, class Basis>
 class Wall {
  public:
@@ -33,7 +35,8 @@ class Wall {
 
   ~Wall() {}
 
-  void detect_contact(T *global_acc, int node_idx, T *node_pos, T *node_mass) {
+  CPPIMPACT_FUNCTION void detect_contact(T *global_acc, int node_idx,
+                                         T *node_pos, T *node_mass) {
     for (int j = 0; j < num_slave_nodes; j++) {
       if (node_idx == slave_node_indices[j]) {
         T wall_distance = (node_pos[dim] - location) * normal;

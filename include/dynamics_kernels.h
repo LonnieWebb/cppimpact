@@ -10,7 +10,7 @@ template <typename T, int spatial_dim, int nodes_per_element, class Basis,
 void update(int num_nodes, int num_elements, int ndof, T dt,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
             const int *element_nodes, const T *vel, const T *global_xloc,
-            T *global_dof, T *global_acc, T *global_mass) {
+            const T *global_dof, T *global_acc, T *global_mass) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
   // Zero-out states

@@ -201,6 +201,10 @@ class Dynamics {
     cudaMalloc((void **)&d_material, sizeof(decltype(*material)));
     cudaMalloc((void **)&d_wall, sizeof(decltype(*d_wall)));
 
+    // Explicitly allocate dynamic-allocated member
+    cudaMalloc((void **)&(d_wall_slave_node_indices),
+               sizeof(int) * mesh->num_slave_nodes);
+
     cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
@@ -212,10 +216,21 @@ class Dynamics {
                sizeof(int) * nodes_per_element * mesh->num_elements,
                cudaMemcpyHostToDevice);
 
-    // TODO: copy material and wall over to the device, seems to be non-trivial
+    // Copy Material is easy for now as it doesn't contain dynamically-allocated
+    // data
     cudaMemcpy(d_material, material, sizeof(decltype(*material)),
                cudaMemcpyHostToDevice);
+
+    // Copy over POD members
     cudaMemcpy(d_wall, wall, sizeof(decltype(*wall)), cudaMemcpyHostToDevice);
+
+    // Copy over dynamic data
+    cudaMemcpy(d_wall_slave_node_indices, wall->slave_node_indices,
+               sizeof(int) * mesh->num_slave_nodes, cudaMemcpyHostToDevice);
+
+    // Point device object's data pointer to the device memory
+    cudaMemcpy(&(d_wall->slave_node_indices), &d_wall_slave_node_indices,
+               sizeof(int *), cudaMemcpyHostToDevice);
   }
 
   void deallocate() {
@@ -227,6 +242,7 @@ class Dynamics {
     cudaFree(d_element_nodes);
     cudaFree(d_material);
     cudaFree(d_wall);
+    cudaFree(d_wall_slave_node_indices);
   }
 
   void solve(double dt, double time_end) {
@@ -264,188 +280,36 @@ class Dynamics {
     update<T, spatial_dim, nodes_per_element>
         <<<mesh->num_elements, threads_per_block>>>(
             mesh->num_elements, dt, d_material, d_wall, d_element_nodes, d_vel,
-            d_global_xloc, d_global_acc, d_global_dof);
+            d_global_xloc, d_global_dof, d_global_acc, d_global_mass);
 
-    cudaMemcpy(vel, d_vel, sizeof(T) * ndof, cudaMemcpyDeviceToHost);
-    array_to_txt<T>("gpu_vel.txt", vel, ndof);
+    // Do we need this?
+    cudaDeviceSynchronize();
 
-#if 0
+    external_forces<T><<<mesh->num_nodes / 32 + 1, 32>>>(
+        mesh->num_nodes, d_wall, d_global_acc, d_global_dof, d_global_mass,
+        d_global_acc);
 
-    // Add contact forces and body forces
-    for (int i = 0; i < mesh->num_nodes; i++) {
-      T node_pos[3];
-      node_pos[0] = global_xloc[3 * i];
-      node_pos[1] = global_xloc[3 * i + 1];
-      node_pos[2] = global_xloc[3 * i + 2];
+    // TODO: delete this
+    cudaDeviceSynchronize();
+    auto err = cudaGetLastError();
+    std::cout << "error code: " << err << "\n";
+    std::cout << "error string: " << cudaGetErrorString(err) << "\n";
 
-      T node_mass[3];
-      node_mass[0] = global_mass[3 * i];
-      node_mass[1] = global_mass[3 * i + 1];
-      node_mass[2] = global_mass[3 * i + 2];
+    T *global_acc = new T[ndof];
+    cudaMemcpy(global_acc, d_global_acc, sizeof(T) * ndof,
+               cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
 
-      // Contact Forces
-      T node_idx = i + 1;
-      wall->detect_contact(global_acc, node_idx, node_pos, node_mass);
-
-      // Body Forces
-      int gravity_dim = 2;
-      global_acc[3 * i + gravity_dim] += -9.81;
-    }
-
-    // b.Stagger V0 .5 = V0 + dt / 2 * a0
-    // Update velocity
     for (int i = 0; i < ndof; i++) {
       vel[i] += 0.5 * dt * global_acc[i];
     }
 
-    //------------------- End of Initialization -------------------
-    // ------------------- Start of Time Loop -------------------
-    double time = 0.0;
-    int timestep = 0;
+    array_to_txt<T>("gpu_vel.txt", vel, ndof);
 
-    while (time <= time_end) {
-      memset(global_acc, 0, sizeof(T) * ndof);
-      memset(global_dof, 0, sizeof(T) * ndof);
-      memset(global_mass, 0, sizeof(T) * ndof);
+    // Main time stepper goes here
+    // while () {
+    // }
 
-      printf("Time: %f\n", time);
-
-      // 1. Compute U1 = U +dt*V0.5
-      // Update nodal displacements
-      for (int j = 0; j < ndof; j++) {
-        global_dof[j] = dt * vel[j];
-      }
-
-      // 2. Compute A1 = (Fext - Fint(U1)/M
-
-      for (int i = 0; i < mesh->num_elements; i++) {
-        // Per element variables
-        for (int k = 0; k < dof_per_element; k++) {
-          element_mass_matrix_diagonals[k] = 0.0;
-          element_xloc[k] = 0.0;
-          element_dof[k] = 0.0;
-        }
-
-        // Get the nodes of this element
-        for (int j = 0; j < nodes_per_element; j++) {
-          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-        }
-
-        // Get the element locations
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_xloc, element_xloc);
-
-        // Get the element degrees of freedom
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_dof, element_dof);
-
-        // Calculate the element mass matrix
-        Analysis::element_mass_matrix(element_density, element_xloc,
-                                      element_dof,
-                                      element_mass_matrix_diagonals, i);
-
-        // assemble global acceleration
-        for (int j = 0; j < nodes_per_element; j++) {
-          int node = this_element_nodes[j];
-
-          global_mass[3 * node] += element_mass_matrix_diagonals[3 * j];
-          global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
-          global_mass[3 * node + 2] += element_mass_matrix_diagonals[3 * j + 2];
-        }
-      }
-
-      for (int i = 0; i < mesh->num_elements; i++) {
-        for (int k = 0; k < dof_per_element; k++) {
-          element_mass_matrix_diagonals[k] = 0.0;
-          element_xloc[k] = 0.0;
-          element_dof[k] = 0.0;
-          element_vel[k] = 0.0;
-          element_acc[k] = 0.0;
-          element_internal_forces[k] = 0.0;
-        }
-
-        for (int j = 0; j < nodes_per_element; j++) {
-          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-        }
-
-        T element_mass_matrix_diagonals[dof_per_element];
-
-        // Get the element mass matrix
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_mass, element_mass_matrix_diagonals);
-
-        // Get the element locations
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_xloc, element_xloc);
-
-        // Get the element degrees of freedom
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_dof, element_dof);
-
-        T Mr_inv[dof_per_element];
-
-        for (int k = 0; k < dof_per_element; k++) {
-          Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
-        }
-
-        Analysis::calculate_f_internal(element_xloc, element_dof,
-                                       element_internal_forces, material);
-
-        for (int j = 0; j < dof_per_element; j++) {
-          element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
-        }
-
-        // assemble global acceleration
-        for (int j = 0; j < nodes_per_element; j++) {
-          int node = this_element_nodes[j];
-
-          global_acc[3 * node] += element_acc[3 * j];
-          global_acc[3 * node + 1] += element_acc[3 * j + 1];
-          global_acc[3 * node + 2] += element_acc[3 * j + 2];
-        }
-      }
-
-      // Add contact forces and body forces
-      for (int i = 0; i < mesh->num_nodes; i++) {
-        T node_pos[3];
-        node_pos[0] = global_xloc[3 * i] + global_dof[3 * i];
-        node_pos[1] = global_xloc[3 * i + 1] + global_dof[3 * i + 1];
-        node_pos[2] = global_xloc[3 * i + 2] + global_dof[3 * i + 2];
-
-        T node_mass[3];
-        node_mass[0] = global_mass[3 * i];
-        node_mass[1] = global_mass[3 * i + 1];
-        node_mass[2] = global_mass[3 * i + 2];
-
-        // Contact Forces
-        wall->detect_contact(global_acc, i, node_pos, node_mass);
-
-        // Body Forces
-        int gravity_dim = 2;
-        global_acc[3 * i + gravity_dim] += -9.81;
-      }
-
-      T total_mass = 0.0;
-      for (int i = 0; i < ndof; i++) {
-        total_mass += global_mass[i] / 3;
-      }
-
-      // 3. Compute V1.5 = V0.5 + A1*dt
-      // 3. Compute V1 = V1.5 - dt/2 * a1
-      // 4. Loop back to 1.
-
-      for (int i = 0; i < ndof; i++) {
-        global_xloc[i] += global_dof[i];
-        vel[i] += dt * global_acc[i];
-
-        // TODO: only run this on export steps
-        vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
-      }
-      export_to_vtk(timestep, vel_i, global_acc, global_mass);
-      time += dt;
-      timestep += 1;
-    }
-#endif
     deallocate();
   }
 
@@ -463,4 +327,5 @@ class Dynamics {
 
   BaseMaterial<T, spatial_dim> *d_material = nullptr;
   Wall<T, 2, Basis> *d_wall = nullptr;
+  int *d_wall_slave_node_indices = nullptr;
 };
