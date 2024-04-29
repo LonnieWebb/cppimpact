@@ -146,3 +146,41 @@ __global__ void external_forces(int num_nodes,
   }
   __syncthreads();
 }
+
+template <typename T>
+__global__ void update_velocity(int ndof, T dt, T *d_vel, T *d_global_acc) {
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int ndof_idx = tid * bid;
+  if (ndof_idx < ndof) {
+    d_vel[ndof_idx] += 0.5 * dt * d_global_acc[ndof_idx];
+  }
+  __syncthreads();
+}
+
+template <typename T>
+__global__ void update_dof(int ndof, T dt, T *d_vel, T *d_global_dof) {
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int ndof_idx = tid * bid;
+  if (ndof_idx < ndof) {
+    d_global_dof[ndof_idx] = dt * d_vel[ndof_idx];
+  }
+  __syncthreads();
+}
+
+template <typename T>
+__global__ void timeloop_update(int ndof, T dt, T *d_global_xloc, T *d_vel,
+                                T *d_global_acc, T *d_vel_i, T *d_global_dof) {
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int ndof_idx = tid * bid;
+  if (ndof_idx < ndof) {
+    d_global_xloc[ndof_idx] += d_global_dof[ndof_idx];
+    d_vel[ndof_idx] += dt * d_global_acc[ndof_idx];
+
+    // TODO: only run this on export steps
+    d_vel_i[ndof_idx] = d_vel[ndof_idx] - 0.5 * dt * d_global_acc[ndof_idx];
+  }
+  __syncthreads();
+}

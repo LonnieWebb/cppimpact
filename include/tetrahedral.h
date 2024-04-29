@@ -90,7 +90,7 @@ class TetrahedralBasis {
 
   template <int dim>
   static CPPIMPACT_FUNCTION void eval_grad(const T pt[], const T dof[],
-                                            T grad[]) {
+                                           T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
@@ -111,7 +111,7 @@ class TetrahedralBasis {
 
   template <int dim>
   static CPPIMPACT_FUNCTION void add_grad(const T pt[], const T coef[],
-                                           T res[]) {
+                                          T res[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
@@ -143,8 +143,8 @@ class TetrahedralBasis {
     N[9] = 2 * L1 * L4;  // 7 from paper
   }
 
-  static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[],
-                                                     const T *pt, T B[]) {
+  static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T *pt,
+                                                    T B[]) {
     // Assuming Nxi is in element coordinates and has dimensions [spatial_dim *
     // nodes_per_element] B matrix should have dimensions [6 *
     // (3*nodes_per_element)], flattened into 1D array

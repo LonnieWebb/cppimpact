@@ -194,6 +194,7 @@ class Dynamics {
     cudaMalloc(&d_global_acc, sizeof(T) * ndof);
     cudaMalloc(&d_global_mass, sizeof(T) * ndof);
     cudaMalloc(&d_vel, sizeof(T) * ndof);
+    cudaMalloc(&d_vel_i, sizeof(T) * ndof);
     cudaMalloc(&d_global_xloc, sizeof(T) * ndof);
     cudaMalloc(&d_element_nodes,
                sizeof(int) * nodes_per_element * mesh->num_elements);
@@ -208,6 +209,7 @@ class Dynamics {
     cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
+    cudaMemset(d_vel_i, T(0.0), sizeof(T) * ndof);
 
     cudaMemcpy(d_global_xloc, mesh->xloc, ndof * sizeof(T),
                cudaMemcpyHostToDevice);
@@ -238,6 +240,7 @@ class Dynamics {
     cudaFree(d_global_acc);
     cudaFree(d_global_mass);
     cudaFree(d_vel);
+    cudaFree(d_vel_i);
     cudaFree(d_global_xloc);
     cudaFree(d_element_nodes);
     cudaFree(d_material);
@@ -285,9 +288,11 @@ class Dynamics {
     // Do we need this?
     cudaDeviceSynchronize();
 
-    external_forces<T><<<mesh->num_nodes / 32 + 1, 32>>>(
-        mesh->num_nodes, d_wall, d_global_xloc, d_global_dof, d_global_mass,
-        d_global_acc);
+    const int node_blocks = mesh->num_nodes / 32 + 1;
+    const int ndof_blocks = ndof / 32 + 1;
+    external_forces<T><<<node_blocks, 32>>>(mesh->num_nodes, d_wall,
+                                            d_global_xloc, d_global_dof,
+                                            d_global_mass, d_global_acc);
 
     // TODO: delete this
     cudaDeviceSynchronize();
@@ -300,15 +305,47 @@ class Dynamics {
                cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
 
+    update_velocity<T><<<ndof_blocks, 32>>>(ndof, dt, d_vel, d_global_acc);
     for (int i = 0; i < ndof; i++) {
       vel[i] += 0.5 * dt * global_acc[i];
     }
 
     array_to_txt<T>("gpu_vel.txt", vel, ndof);
 
-    // Main time stepper goes here
-    // while () {
-    // }
+    T time = 0.0;
+    int timestep = 0;
+    // Time Loop
+    while (time <= time_end) {
+      cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
+      cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
+      cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
+      printf("Time: %f\n", time);
+
+      update_dof<T><<<ndof_blocks, 32>>>(ndof, dt, d_vel, d_global_dof);
+      cudaDeviceSynchronize();
+
+      update<T, spatial_dim, nodes_per_element>
+          <<<mesh->num_elements, threads_per_block>>>(
+              mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
+              d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass);
+      cudaDeviceSynchronize();
+
+      external_forces<T><<<node_blocks, 32>>>(mesh->num_nodes, d_wall,
+                                              d_global_xloc, d_global_dof,
+                                              d_global_mass, d_global_acc);
+      cudaDeviceSynchronize();
+
+      timeloop_update<T><<<ndof_blocks, 32>>>(
+          ndof, dt, d_global_xloc, d_vel, d_global_acc, d_vel_i, d_global_dof);
+
+      // TODO: exporting
+      // if (timestep % export_interval == 0) {
+      //   export_to_vtk();
+      // };
+
+      time += dt;
+      timestep += 1;
+    }
 
     deallocate();
   }
@@ -321,6 +358,7 @@ class Dynamics {
   T *d_global_acc = nullptr;
   T *d_global_mass = nullptr;
   T *d_vel = nullptr;
+  T *d_vel_i = nullptr;
   T *d_global_xloc = nullptr;
 
   int *d_element_nodes = nullptr;
