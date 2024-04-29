@@ -7,7 +7,7 @@
 // Update the system states via time-stepping
 template <typename T, int spatial_dim, int nodes_per_element, class Basis,
           class Analysis>
-void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
+void update(int num_nodes, int num_elements, int ndof, T dt,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
             const int *element_nodes, const T *vel, const T *global_xloc,
             T *global_acc, T *global_dof, T *global_mass) {
@@ -59,7 +59,7 @@ void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
         this_element_nodes.data(), global_dof, element_dof.data());
 
     // Calculate the element mass matrix
-    Analysis::element_mass_matrix(element_density, element_xloc.data(),
+    Analysis::element_mass_matrix(material->rho, element_xloc.data(),
                                   element_dof.data(),
                                   element_mass_matrix_diagonals.data());
 

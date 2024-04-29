@@ -1,19 +1,26 @@
 #pragma once
+
 #include "analysis.h"
+#include "basematerial.h"
 #include "physics.h"
 #include "tetrahedral.h"
+#include "wall.h"
 
 // Update the system states via time-stepping
-template <typename T, int dof_per_element, int nodes_per_element>
-__global__ void update(T element_density, int* d_element_nodes,
-                       T* d_global_xloc, T* d_global_dof, T* d_vel) {
+template <typename T, int spatial_dim, int nodes_per_element>
+__global__ void update(int num_elements, T dt,
+                       BaseMaterial<T, spatial_dim>* d_material,
+                       Wall<T, 2, TetrahedralBasis<T>>* d_wall,
+                       const int* d_element_nodes, const T* d_vel,
+                       T* d_global_xloc, T* d_global_acc, T* d_global_dof) {
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
+  int constexpr dof_per_element = spatial_dim * nodes_per_element;
+
   int elem = blockIdx.x;
-  int num_elements = blockDim.x;
   if (elem >= num_elements) return;
 
   __shared__ T element_mass_matrix_diagonals[dof_per_element];
@@ -55,18 +62,18 @@ __global__ void update(T element_density, int* d_element_nodes,
 
   __syncthreads();
   // Calculate element mass matrix
-  Analysis::element_mass_matrix(tid, element_density, element_xloc, element_dof,
+  Analysis::element_mass_matrix(tid, d_material->rho, element_xloc, element_dof,
                                 element_mass_matrix_diagonals);
 
-#if 0
-  T Mr_inv[dof_per_element];
-  for (int k = 0; k < dof_per_element; k++) {
-    Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
+  T Mr_inv = 0.0;
+  if (tid < dof_per_element) {
+    Mr_inv = 1.0 / element_mass_matrix_diagonals[tid];
   }
 
-  Analysis::calculate_f_internal(element_xloc, element_dof,
-                                 element_internal_forces, material);
+  Analysis::calculate_f_internal(tid, element_xloc, element_dof,
+                                 element_internal_forces, d_material);
 
+#if 0
   // Calculate element acceleration
 //   for (int j = 0; j < dof_per_element; j++) {
 //     element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);

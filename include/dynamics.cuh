@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "basematerial.h"
+#include "cppimpact_utils.h"
 #include "dynamics_kernels.cuh"
 #include "mesh.h"
 #include "wall.h"
@@ -197,6 +198,9 @@ class Dynamics {
     cudaMalloc(&d_element_nodes,
                sizeof(int) * nodes_per_element * mesh->num_elements);
 
+    cudaMalloc((void **)&d_material, sizeof(decltype(*material)));
+    cudaMalloc((void **)&d_wall, sizeof(decltype(*d_wall)));
+
     cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
@@ -207,6 +211,11 @@ class Dynamics {
     cudaMemcpy(d_element_nodes, mesh->element_nodes,
                sizeof(int) * nodes_per_element * mesh->num_elements,
                cudaMemcpyHostToDevice);
+
+    // TODO: copy material and wall over to the device, seems to be non-trivial
+    cudaMemcpy(d_material, material, sizeof(decltype(*material)),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_wall, wall, sizeof(decltype(*wall)), cudaMemcpyHostToDevice);
   }
 
   void deallocate() {
@@ -216,6 +225,8 @@ class Dynamics {
     cudaFree(d_vel);
     cudaFree(d_global_xloc);
     cudaFree(d_element_nodes);
+    cudaFree(d_material);
+    cudaFree(d_wall);
   }
 
   void solve(double dt, double time_end) {
@@ -241,10 +252,7 @@ class Dynamics {
     // and hence, preferrable.
 
     // ------------------- Initialization -------------------
-    constexpr int dof_per_element = nodes_per_element * spatial_dim;
     printf("Solving dynamics\n");
-
-    double time = 0.0;
 
     // a. A0 = (Fext - Fint(U0))/M
     // Loop over all elements
@@ -253,9 +261,13 @@ class Dynamics {
     // num_quadrature_pts = 5 and 64 > 50, need to properly determine this value
     // to generalize the code
     constexpr int threads_per_block = 64;
-    update<T, dof_per_element, nodes_per_element>
+    update<T, spatial_dim, nodes_per_element>
         <<<mesh->num_elements, threads_per_block>>>(
-            material->rho, d_element_nodes, d_global_xloc, d_global_dof, d_vel);
+            mesh->num_elements, dt, d_material, d_wall, d_element_nodes, d_vel,
+            d_global_xloc, d_global_acc, d_global_dof);
+
+    cudaMemcpy(vel, d_vel, sizeof(T) * ndof, cudaMemcpyDeviceToHost);
+    array_to_txt<T>("gpu_vel.txt", vel, ndof);
 
 #if 0
 
@@ -288,6 +300,7 @@ class Dynamics {
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
+    double time = 0.0;
     int timestep = 0;
 
     while (time <= time_end) {
@@ -447,4 +460,7 @@ class Dynamics {
   T *d_global_xloc = nullptr;
 
   int *d_element_nodes = nullptr;
+
+  BaseMaterial<T, spatial_dim> *d_material = nullptr;
+  Wall<T, 2, Basis> *d_wall = nullptr;
 };

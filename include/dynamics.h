@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "basematerial.h"
+#include "cppimpact_utils.h"
 #include "dynamics_kernels.h"
 #include "mesh.h"
 #include "wall.h"
@@ -210,7 +211,6 @@ class Dynamics {
     printf("Solving dynamics\n");
 
     // Material and mesh information
-    const T element_density = material->rho;
     int *element_nodes = mesh->element_nodes;
 
     // Allocate global data
@@ -235,15 +235,16 @@ class Dynamics {
 
     // Initialize states
     update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
-        mesh->num_nodes, mesh->num_elements, ndof, dt, element_density,
-        material, wall, element_nodes, vel, global_xloc, global_acc, global_dof,
-        global_mass);
+        mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
+        element_nodes, vel, global_xloc, global_acc, global_dof, global_mass);
 
     // b.Stagger V0 .5 = V0 + dt / 2 * a0
     // Update velocity
     for (int i = 0; i < ndof; i++) {
       vel[i] += 0.5 * dt * global_acc[i];
     }
+
+    array_to_txt<T>("cpu_vel.txt", vel, ndof);
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
@@ -253,9 +254,8 @@ class Dynamics {
     while (time <= time_end) {
       printf("Time: %f\n", time);
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
-          mesh->num_nodes, mesh->num_elements, ndof, dt, element_density,
-          material, wall, element_nodes, vel, global_xloc, global_acc,
-          global_dof, global_mass);
+          mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
+          element_nodes, vel, global_xloc, global_acc, global_dof, global_mass);
 
       // Compute total mass (useful?)
       T total_mass = 0.0;

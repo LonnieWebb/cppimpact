@@ -1,9 +1,10 @@
 #pragma once
 
 #include <cblas.h>
-#include "cppimpact_defs.h"
 
 #include "basematerial.h"
+#include "cppimpact_blas.h"
+#include "cppimpact_defs.h"
 #include "mesh.h"
 #include "physics.h"
 #include "tetrahedral.h"
@@ -168,8 +169,8 @@ class FEAnalysis {
 
   template <int ndof>
   static CPPIMPACT_FUNCTION void get_element_dof(const int nodes[],
-                                                  const T dof[],
-                                                  T element_dof[]) {
+                                                 const T dof[],
+                                                 T element_dof[]) {
     for (int j = 0; j < nodes_per_element; j++) {
       int node = nodes[j];
       for (int k = 0; k < dof_per_node; k++, element_dof++) {
@@ -202,7 +203,6 @@ class FEAnalysis {
       }
     }
   }
-
 
 #ifdef CPPIMPACT_CUDA_BACKEND
   static T energy(int num_elements, int element_nodes[], T xloc[], T dof[],
@@ -278,7 +278,6 @@ class FEAnalysis {
     cudaFree(d_D1);
     return total_energy;
   }
-
 
   static void residual(int num_elements, int num_nodes,
                        const int element_nodes[], const T xloc[], const T dof[],
@@ -398,7 +397,6 @@ class FEAnalysis {
     }
   }
 
-
 #ifdef CPPIMPACT_CUDA_BACKEND
   static __device__ void element_mass_matrix(int tid, const T element_density,
                                              const T *element_xloc,
@@ -469,6 +467,83 @@ class FEAnalysis {
     }
   }
 
+#ifdef CPPIMPACT_CUDA_BACKEND
+  static __device__ void calculate_f_internal(
+      int tid, const T *element_xloc, const T *element_dof, T *f_internal,
+      BaseMaterial<T, dof_per_node> *material) {
+    T pt[spatial_dim];
+    T sigma[6];
+    int constexpr dof_per_element = spatial_dim * nodes_per_element;
+
+    // contiguous for each quadrature points
+    __shared__ T weights[num_quadrature_pts];
+    __shared__ T detJs[num_quadrature_pts];
+    __shared__ T BTS[num_quadrature_pts * dof_per_element];
+
+    if (tid < num_quadrature_pts) {  // tid = quad point index
+
+      weights[tid] = Quadrature::template get_quadrature_pt<T>(tid, pt);
+
+      // Evaluate the derivative of the spatial dof in the computational
+      // coordinates
+      T J[spatial_dim * spatial_dim];
+      Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
+
+      // Compute the inverse and determinant of the Jacobian matrix
+      T Jinv[spatial_dim * spatial_dim];
+      detJs[tid] = inv3x3(J, Jinv);
+
+      T B_matrix[6 * dof_per_element];
+      memset(B_matrix, 0, 6 * dof_per_element * sizeof(T));
+
+      Basis::calculate_B_matrix(Jinv, pt, B_matrix);
+
+      T D_matrix[6 * 6];
+      memset(D_matrix, 0, 6 * 6 * sizeof(T));
+      Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix);
+
+      T intermediate_1[6];
+      memset(intermediate_1, 0, 6 * sizeof(T));
+
+      // multiply B*u
+      cppimpact_gemv<T, MatOp::NoTrans>(6, 30, 1.0, B_matrix, element_dof, 0.0,
+                                        intermediate_1);
+
+      memset(sigma, 0, 6 * sizeof(T));
+      // multiply D*intermediate_1
+      cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix, intermediate_1,
+                                        0.0, sigma);
+
+      // T stress_vector[6];
+      // stress_vector[0] = sigma[0]; // sigma_xx
+      // stress_vector[1] = sigma[4]; // sigma_yy
+      // stress_vector[2] = sigma[8]; // sigma_zz
+      // stress_vector[3] = sigma[1]; // sigma_xy
+      // stress_vector[4] = sigma[5]; // sigma_yz
+      // stress_vector[5] = sigma[2]; // sigma_xz
+
+      int offset = tid * dof_per_element;
+      memset(BTS + offset, 0, sizeof(T) * dof_per_element);
+
+      // multiply B^T by S
+      cppimpact_gemv<T, MatOp::Trans>(6, 30, 1.0, B_matrix, sigma, 0.0,
+                                      BTS + offset);
+    }
+
+    __syncthreads();
+
+    if (tid < num_quadrature_pts * nodes_per_element) {
+      int i = tid / num_quadrature_pts;  // node index
+      int k = tid % num_quadrature_pts;  // quadrature index
+      int offset = k * dof_per_element;
+      for (int d = 0; d < spatial_dim; d++) {
+        atomicAdd(&f_internal[spatial_dim * i + d],
+                  weights[k] * detJs[k] * BTS[offset + spatial_dim * i + d]);
+      }
+    }
+  }
+#endif
+
   static void calculate_f_internal(const T *element_xloc, const T *element_dof,
                                    T *f_internal,
                                    BaseMaterial<T, dof_per_node> *material) {
@@ -498,13 +573,17 @@ class FEAnalysis {
       memset(intermediate_1, 0, 6 * sizeof(T));
 
       // multiply B*u
-      cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 30, 1.0, B_matrix, 30,
-                  element_dof, 1, 0.0, intermediate_1, 1);
+      cppimpact_gemv<T, MatOp::NoTrans>(6, 30, 1.0, B_matrix, element_dof, 0.0,
+                                        intermediate_1);
+      // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 30, 1.0, B_matrix, 30,
+      //             element_dof, 1, 0.0, intermediate_1, 1);
 
       memset(sigma, 0, 6 * sizeof(T));
       // multiply D*intermediate_1
-      cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 6, 1.0, D_matrix, 6,
-                  intermediate_1, 1, 0.0, sigma, 1);
+      cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix, intermediate_1,
+                                        0.0, sigma);
+      // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 6, 1.0, D_matrix, 6,
+      //             intermediate_1, 1, 0.0, sigma, 1);
 
       // T stress_vector[6];
       // stress_vector[0] = sigma[0]; // sigma_xx
@@ -518,8 +597,9 @@ class FEAnalysis {
       memset(BTS, 0, sizeof(T) * spatial_dim * nodes_per_element);
 
       // multiply B^T by S
-      cblas_dgemv(CblasRowMajor, CblasTrans, 6, 30, 1.0, B_matrix, 30, sigma, 1,
-                  0.0, BTS, 1);
+      cppimpact_gemv<T, MatOp::Trans>(6, 30, 1.0, B_matrix, sigma, 0.0, BTS);
+      // cblas_dgemv(CblasRowMajor, CblasTrans, 6, 30, 1.0, B_matrix, 30, sigma,
+      //             1, 0.0, BTS, 1);
 
       for (int j = 0; j < spatial_dim * nodes_per_element; j++) {
         f_internal[j] += weight * detJ * BTS[j];
