@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "basematerial.h"
+#include "dynamics_kernels.h"
 #include "mesh.h"
 #include "wall.h"
 
@@ -330,143 +331,12 @@ class Dynamics {
     int timestep = 0;
 
     while (time <= time_end) {
-      memset(global_acc, 0, sizeof(T) * ndof);
-      memset(global_dof, 0, sizeof(T) * ndof);
-      memset(global_mass, 0, sizeof(T) * ndof);
-
       printf("Time: %f\n", time);
+      update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
+          mesh->num_nodes, mesh->num_elements, ndof, dt, element_density,
+          material, wall, element_nodes, global_xloc, global_acc, global_dof,
+          global_mass, vel, vel_i);
 
-      // 1. Compute U1 = U +dt*V0.5
-      // Update nodal displacements
-      for (int j = 0; j < ndof; j++) {
-        global_dof[j] = dt * vel[j];
-      }
-
-      // 2. Compute A1 = (Fext - Fint(U1)/M
-
-      for (int i = 0; i < mesh->num_elements; i++) {
-        // Per element variables
-        for (int k = 0; k < dof_per_element; k++) {
-          element_mass_matrix_diagonals[k] = 0.0;
-          element_xloc[k] = 0.0;
-          element_dof[k] = 0.0;
-        }
-
-        // Get the nodes of this element
-        for (int j = 0; j < nodes_per_element; j++) {
-          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-        }
-
-        // Get the element locations
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_xloc, element_xloc);
-
-        // Get the element degrees of freedom
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_dof, element_dof);
-
-        // Calculate the element mass matrix
-        Analysis::element_mass_matrix(element_density, element_xloc,
-                                      element_dof,
-                                      element_mass_matrix_diagonals);
-
-        // assemble global acceleration
-        for (int j = 0; j < nodes_per_element; j++) {
-          int node = this_element_nodes[j];
-
-          global_mass[3 * node] += element_mass_matrix_diagonals[3 * j];
-          global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
-          global_mass[3 * node + 2] += element_mass_matrix_diagonals[3 * j + 2];
-        }
-      }
-
-      for (int i = 0; i < mesh->num_elements; i++) {
-        for (int k = 0; k < dof_per_element; k++) {
-          element_mass_matrix_diagonals[k] = 0.0;
-          element_xloc[k] = 0.0;
-          element_dof[k] = 0.0;
-          element_vel[k] = 0.0;
-          element_acc[k] = 0.0;
-          element_internal_forces[k] = 0.0;
-        }
-
-        for (int j = 0; j < nodes_per_element; j++) {
-          this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-        }
-
-        T element_mass_matrix_diagonals[dof_per_element];
-
-        // Get the element mass matrix
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_mass, element_mass_matrix_diagonals);
-
-        // Get the element locations
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_xloc, element_xloc);
-
-        // Get the element degrees of freedom
-        Analysis::template get_element_dof<spatial_dim>(
-            this_element_nodes, global_dof, element_dof);
-
-        T Mr_inv[dof_per_element];
-
-        for (int k = 0; k < dof_per_element; k++) {
-          Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
-        }
-
-        Analysis::calculate_f_internal(element_xloc, element_dof,
-                                       element_internal_forces, material);
-
-        for (int j = 0; j < dof_per_element; j++) {
-          element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
-        }
-
-        // assemble global acceleration
-        for (int j = 0; j < nodes_per_element; j++) {
-          int node = this_element_nodes[j];
-
-          global_acc[3 * node] += element_acc[3 * j];
-          global_acc[3 * node + 1] += element_acc[3 * j + 1];
-          global_acc[3 * node + 2] += element_acc[3 * j + 2];
-        }
-      }
-
-      // Add contact forces and body forces
-      for (int i = 0; i < mesh->num_nodes; i++) {
-        T node_pos[3];
-        node_pos[0] = global_xloc[3 * i] + global_dof[3 * i];
-        node_pos[1] = global_xloc[3 * i + 1] + global_dof[3 * i + 1];
-        node_pos[2] = global_xloc[3 * i + 2] + global_dof[3 * i + 2];
-
-        T node_mass[3];
-        node_mass[0] = global_mass[3 * i];
-        node_mass[1] = global_mass[3 * i + 1];
-        node_mass[2] = global_mass[3 * i + 2];
-
-        // Contact Forces
-        wall->detect_contact(global_acc, i, node_pos, node_mass);
-
-        // Body Forces
-        int gravity_dim = 2;
-        global_acc[3 * i + gravity_dim] += -9.81;
-      }
-
-      T total_mass = 0.0;
-      for (int i = 0; i < ndof; i++) {
-        total_mass += global_mass[i] / 3;
-      }
-
-      // 3. Compute V1.5 = V0.5 + A1*dt
-      // 3. Compute V1 = V1.5 - dt/2 * a1
-      // 4. Loop back to 1.
-
-      for (int i = 0; i < ndof; i++) {
-        global_xloc[i] += global_dof[i];
-        vel[i] += dt * global_acc[i];
-
-        // TODO: only run this on export steps
-        vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
-      }
       export_to_vtk(timestep, vel_i, global_acc, global_mass);
       time += dt;
       timestep += 1;

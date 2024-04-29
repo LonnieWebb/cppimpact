@@ -3,10 +3,10 @@
 #include "physics.h"
 #include "tetrahedral.h"
 
+// Update the system states via time-stepping
 template <typename T, int dof_per_element, int nodes_per_element>
-__global__ void compute_f_internal(T element_density, int* d_element_nodes,
-                                   T* d_global_xloc, T* d_global_dof,
-                                   T* d_vel) {
+__global__ void update(T element_density, int* d_element_nodes,
+                       T* d_global_xloc, T* d_global_dof, T* d_vel) {
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
