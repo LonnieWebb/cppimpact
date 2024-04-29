@@ -35,6 +35,8 @@ void update(int num_nodes, int num_elements, int ndof, T dt, T element_density,
   // 2. Compute A1 = (Fext - Fint(U1)/M
 
   // --- Update global mass
+  // TODO: Lonnie: looks like this part won't be used during initialization, is
+  // it ok to perform these computations anyways?
   for (int i = 0; i < num_elements; i++) {
     // Per element variables
     for (int k = 0; k < dof_per_element; k++) {
