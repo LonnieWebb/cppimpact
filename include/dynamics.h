@@ -177,18 +177,6 @@ class Dynamics {
     std::cout << "Exported " << filename << std::endl;
   }
 
-  // void add_element_vec_3D(const int this_element_nodes[], T *element_vec,
-  //                         T *global_vec)
-  // {
-  //   for (int j = 0; j < nodes_per_element; j++)
-  //   {
-  //     int node = this_element_nodes[j];
-  //     global_vec[3 * node] += element_vec[3 * j];
-  //     global_vec[3 * node + 1] += element_vec[3 * j + 1];
-  //     global_vec[3 * node + 2] += element_vec[3 * j + 2];
-  //   }
-  // }
-
   void solve(double dt, double time_end, int export_interval) {
     // Perform a dynamic analysis. The algorithm is staggered as follows:
     // This assumes that the initial u, v, a and fext are already initialized

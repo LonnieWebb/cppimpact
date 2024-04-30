@@ -28,11 +28,7 @@ class Wall {
         slave_node_indices(slave_node_indices),
         num_slave_nodes(num_slave_nodes),
         normal(normal) {
-    T norm_stiffness = normal * stiffness;
-    // for (int i = 0; i < num_slave_nodes; i++) {
-    //   std::cout << "slave_node_indices[i]: " << slave_node_indices[i]
-    //             << std::endl;
-    // }
+    norm_stiffness = normal * stiffness;
   }
 
   ~Wall() {}
