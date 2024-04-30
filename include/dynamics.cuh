@@ -12,7 +12,7 @@
 #include "mesh.h"
 #include "wall.h"
 
-template <typename T, class Basis, class Analysis>
+template <typename T, class Basis, class Analysis, class Quadrature>
 class Dynamics {
  public:
   Mesh<T> *mesh;
@@ -22,6 +22,7 @@ class Dynamics {
   int ndof;
   static constexpr int nodes_per_element = Basis::nodes_per_element;
   static constexpr int spatial_dim = Basis::spatial_dim;
+  static constexpr int num_quadrature_pts = Quadrature::num_quadrature_pts;
   static constexpr int dof_per_node = spatial_dim;
   BaseMaterial<T, dof_per_node> *material;
   Wall<T, 2, Basis> *wall;
@@ -248,7 +249,7 @@ class Dynamics {
     cudaFree(d_wall_slave_node_indices);
   }
 
-  void solve(double dt, double time_end) {
+  void solve(double dt, double time_end, int export_interval) {
     // Allocate global device data
     allocate();
 
@@ -280,10 +281,18 @@ class Dynamics {
     // num_quadrature_pts = 5 and 64 > 50, need to properly determine this value
     // to generalize the code
     constexpr int threads_per_block = 64;
+    constexpr int nodes_per_elem_num_quad =
+        nodes_per_element * num_quadrature_pts;
+
+    T vel_i = new T[ndof];
+    T global_mass = new T[ndof];
+    T global_acc = new T[ndof];
+
     update<T, spatial_dim, nodes_per_element>
         <<<mesh->num_elements, threads_per_block>>>(
             mesh->num_elements, dt, d_material, d_wall, d_element_nodes, d_vel,
-            d_global_xloc, d_global_dof, d_global_acc, d_global_mass);
+            d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
+            nodes_per_elem_num_quad);
 
     // Do we need this?
     cudaDeviceSynchronize();
@@ -300,7 +309,6 @@ class Dynamics {
     std::cout << "error code: " << err << "\n";
     std::cout << "error string: " << cudaGetErrorString(err) << "\n";
 
-    T *global_acc = new T[ndof];
     cudaMemcpy(global_acc, d_global_acc, sizeof(T) * ndof,
                cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
@@ -337,12 +345,12 @@ class Dynamics {
           <<<ndof_blocks, 32, 0, streams[0]>>>(ndof, dt, d_vel, d_global_dof);
       cudaStreamSynchronize(streams[0]);
 
-      // update<T, spatial_dim, nodes_per_element>
-      //     <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
-      //         mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
-      //         d_vel, d_global_xloc, d_global_dof, d_global_acc,
-      //         d_global_mass);
-      // cudaStreamSynchronize(streams[0]);
+      update<T, spatial_dim, nodes_per_element>
+          <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
+              mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
+              d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
+              nodes_per_elem_num_quad);
+      cudaStreamSynchronize(streams[0]);
 
       external_forces<T><<<node_blocks, 32, 0, streams[0]>>>(
           mesh->num_nodes, d_wall, d_global_xloc, d_global_dof, d_global_mass,
@@ -354,9 +362,18 @@ class Dynamics {
       cudaStreamSynchronize(streams[0]);
 
       // TODO: exporting
-      // if (timestep % export_interval == 0) {
-      //   export_to_vtk();
-      // };
+      if (timestep % export_interval == 0) {
+        cudaMemcpyAsync(vel_i, d_vel, ndof * sizeof(T), cudaMemcpyDeviceToHost,
+                        streams[0]);
+        cudaMemcpyAsync(global_acc, d_global_acc, ndof * sizeof(T),
+                        cudaMemcpyDeviceToHost, streams[1]);
+        cudaMemcpyAsync(global_mass, d_global_mass, ndof * sizeof(T),
+                        cudaMemcpyDeviceToHost, streams[2]);
+        cudaStreamSynchronize(streams[0]);
+        cudaStreamSynchronize(streams[1]);
+        cudaStreamSynchronize(streams[2]);
+        export_to_vtk(timestep, vel_i, global_acc, global_mass);
+      };
 
       time += dt;
       timestep += 1;

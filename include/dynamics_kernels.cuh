@@ -13,7 +13,8 @@ __global__ void update(int num_elements, T dt,
                        Wall<T, 2, TetrahedralBasis<T>> *d_wall,
                        const int *d_element_nodes, const T *d_vel,
                        const T *d_global_xloc, const T *d_global_dof,
-                       T *d_global_acc, T *d_global_mass) {
+                       T *d_global_acc, T *d_global_mass,
+                       const int nodes_per_elem_num_quad) {
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
@@ -30,10 +31,10 @@ __global__ void update(int num_elements, T dt,
   __shared__ T element_acc[dof_per_element];
   __shared__ T element_vel[dof_per_element];
   __shared__ T element_internal_forces[dof_per_element];
-
   __shared__ int this_element_nodes[nodes_per_element];
 
   int tid = threadIdx.x;
+
   if (tid < dof_per_element) {
     element_mass_matrix_diagonals[tid] = 0.0;
     element_xloc[tid] = 0.0;
@@ -64,7 +65,8 @@ __global__ void update(int num_elements, T dt,
   __syncthreads();
   // Calculate element mass matrix
   Analysis::element_mass_matrix(tid, d_material->rho, element_xloc, element_dof,
-                                element_mass_matrix_diagonals);
+                                element_mass_matrix_diagonals,
+                                nodes_per_elem_num_quad);
 
   int j = tid / 3;  // 0 ~ nodes_per_element - 1
   int k = tid % 3;  // 0, 1, 2
@@ -93,8 +95,8 @@ __global__ void update(int num_elements, T dt,
     Mr_inv = 1.0 / element_mass_matrix_diagonals[tid];
   }
 
-  Analysis::calculate_f_internal(tid, element_xloc, element_dof,
-                                 element_internal_forces, d_material);
+  // Analysis::calculate_f_internal(tid, element_xloc, element_dof,
+  //  element_internal_forces, d_material);
   __syncthreads();
 
   // Calculate element acceleration

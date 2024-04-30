@@ -12,7 +12,7 @@
 #include "mesh.h"
 #include "wall.h"
 
-template <typename T, class Basis, class Analysis>
+template <typename T, class Basis, class Analysis, class Quadrature>
 class Dynamics {
  public:
   Mesh<T> *mesh;
@@ -23,6 +23,7 @@ class Dynamics {
   static constexpr int nodes_per_element = Basis::nodes_per_element;
   static constexpr int spatial_dim = Basis::spatial_dim;
   static constexpr int dof_per_node = spatial_dim;
+  static constexpr int num_quadrature_pts = Quadrature::num_quadrature_pts;
   BaseMaterial<T, dof_per_node> *material;
   Wall<T, 2, Basis> *wall;
   T *global_xloc;

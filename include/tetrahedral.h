@@ -12,27 +12,27 @@ class TetrahedralQuadrature {
       pt[0] = 0.25;
       pt[1] = 0.25;
       pt[2] = 0.25;
-      return -2.0 / 15;
+      return -0.13333333333;
     } else if (k == 1) {
-      pt[0] = 1.0 / 6.0;
-      pt[1] = 1.0 / 6.0;
-      pt[2] = 1.0 / 6.0;
-      return 3.0 / 40;
+      pt[0] = 0.16666666666;
+      pt[1] = 0.16666666666;
+      pt[2] = 0.16666666666;
+      return 0.075;
     } else if (k == 2) {
       pt[0] = 0.5;
-      pt[1] = 1.0 / 6.0;
-      pt[2] = 1.0 / 6.0;
-      return 3.0 / 40;
+      pt[1] = 0.16666666666;
+      pt[2] = 0.16666666666;
+      return 0.075;
     } else if (k == 3) {
-      pt[0] = 1.0 / 6.0;
+      pt[0] = 0.16666666666;
       pt[1] = 0.5;
-      pt[2] = 1.0 / 6.0;
-      return 3.0 / 40;
+      pt[2] = 0.16666666666;
+      return 0.075;
     } else if (k == 4) {
-      pt[0] = 1.0 / 6.0;
-      pt[1] = 1.0 / 6.0;
+      pt[0] = 0.16666666666;
+      pt[1] = 0.16666666666;
       pt[2] = 0.5;
-      return 3.0 / 40;
+      return 0.075;
     }
     return 0.0;
   }
@@ -98,16 +98,44 @@ class TetrahedralBasis {
       grad[k] = 0.0;
     }
 
-    for (int i = 0; i < nodes_per_element; i++) {
-      for (int k = 0; k < dim; k++) {
-        grad[spatial_dim * k] += Nxi[spatial_dim * i] * dof[dim * i + k];
-        grad[spatial_dim * k + 1] +=
+    for (int k = 0; k < dim; k++) {
+      for (int i = 0; i < nodes_per_element; i++) {
+        grad[spatial_dim * k] += 1.0;
+        // Nxi[spatial_dim * i];  //     * dof[dim * i + k];
+        grad[spatial_dim * k + 1] += 1.0;
+        // Nxi[spatial_dim * i + 1];  // * dof[dim * i + k];
+        grad[spatial_dim * k + 2] += 1.0;
+        // Nxi[spatial_dim * i + 2];  // * dof[dim * i + k];
+      }
+    }
+  }
+
+#ifdef CPPIMPACT_CUDA_BACKEND
+  template <int dim>
+  static CPPIMPACT_FUNCTION void eval_grad(int tid, const T pt[], const T dof[],
+                                           T grad[]),
+  {
+    T Nxi[spatial_dim * nodes_per_element];
+    eval_basis_grad(pt, Nxi);
+    dof_offset = tid * 5;
+
+    for (int k = 0; k < spatial_dim * dim; k++) {
+      grad[k] = 0.0;
+    }
+
+    for (int k = 0; k < dim; k++) {
+      for (int i = 0; i < nodes_per_element; i++) {
+        grad[spatial_dim * k + dof_offset] +=
+            Nxi[spatial_dim * i] * dof[dim * i + k];
+        grad[spatial_dim * k + 1 + dof_offset] +=
             Nxi[spatial_dim * i + 1] * dof[dim * i + k];
-        grad[spatial_dim * k + 2] +=
+        grad[spatial_dim * k + 2 + dof_offset] +=
             Nxi[spatial_dim * i + 2] * dof[dim * i + k];
       }
     }
   }
+
+#endif
 
   template <int dim>
   static CPPIMPACT_FUNCTION void add_grad(const T pt[], const T coef[],

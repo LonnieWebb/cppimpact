@@ -398,10 +398,10 @@ class FEAnalysis {
   }
 
 #ifdef CPPIMPACT_CUDA_BACKEND
-  static __device__ void element_mass_matrix(int tid, const T element_density,
-                                             const T *element_xloc,
-                                             const T *element_dof,
-                                             T *element_mass_matrix_diagonals) {
+  static __device__ void element_mass_matrix(
+      int tid, const T element_density, const T *element_xloc,
+      const T *element_dof, T *element_mass_matrix_diagonals,
+      const int nodes_per_elem_num_quad) {
     int i = tid / num_quadrature_pts;  // node index
     int k = tid % num_quadrature_pts;  // quadrature index
 
@@ -410,17 +410,19 @@ class FEAnalysis {
       m_i[tid] = 0.0;
     }
 
+    T pt[spatial_dim];
+    T J[spatial_dim * spatial_dim];
+    __shared__ T J[num_quadrature_pts * spatial_dim * spatial_dim];
+
     __syncthreads();
-    if (tid < nodes_per_element * num_quadrature_pts) {
-      // for (int i = 0; i < nodes_per_element = 10; i++) {
-      // for (int k = 0; k < num_quadrature_pts = 5; k++) {
-      T pt[spatial_dim];
-      T weight = Quadrature::get_quadrature_pt(k, pt);
+    if (tid < num_quadrature_pts) {
+      T weight = Quadrature::get_quadrature_pt(tid, pt);
       // Evaluate the derivative of the spatial dof in the computational
       // coordinates
-      T J[spatial_dim * spatial_dim];
-      Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
-
+      Basis::template eval_grad<spatial_dim>(tid, pt, element_xloc, J);
+    }
+    __syncthreads();
+    if (tid < nodes_per_element) {
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
