@@ -337,11 +337,12 @@ class Dynamics {
           <<<ndof_blocks, 32, 0, streams[0]>>>(ndof, dt, d_vel, d_global_dof);
       cudaStreamSynchronize(streams[0]);
 
-      update<T, spatial_dim, nodes_per_element>
-          <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
-              mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
-              d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass);
-      cudaStreamSynchronize(streams[0]);
+      // update<T, spatial_dim, nodes_per_element>
+      //     <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
+      //         mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
+      //         d_vel, d_global_xloc, d_global_dof, d_global_acc,
+      //         d_global_mass);
+      // cudaStreamSynchronize(streams[0]);
 
       external_forces<T><<<node_blocks, 32, 0, streams[0]>>>(
           mesh->num_nodes, d_wall, d_global_xloc, d_global_dof, d_global_mass,

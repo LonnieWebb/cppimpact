@@ -16,6 +16,7 @@ class Wall {
   int *slave_node_indices;
   int num_slave_nodes;
   int normal;
+  T norm_stiffness;
   // static_assert(normal == 1 || normal == -1, "Normal must be either 1 or
   // -1.");
 
@@ -27,6 +28,7 @@ class Wall {
         slave_node_indices(slave_node_indices),
         num_slave_nodes(num_slave_nodes),
         normal(normal) {
+    T norm_stiffness = normal * stiffness;
     // for (int i = 0; i < num_slave_nodes; i++) {
     //   std::cout << "slave_node_indices[i]: " << slave_node_indices[i]
     //             << std::endl;
@@ -37,14 +39,27 @@ class Wall {
 
   CPPIMPACT_FUNCTION void detect_contact(T *global_acc, int node_idx,
                                          T *node_pos, T *node_mass) {
+    //   for (int j = 0; j < num_slave_nodes; j++) {
+    //     if (node_idx == slave_node_indices[j]) {
+    //       T wall_distance = (node_pos[dim] - location) * normal;
+    //       if (wall_distance < 0.0) {
+    //         global_acc[3 * (node_idx) + dim] +=
+    //             -1 * (1 / node_mass[dim]) * 200E6 * wall_distance * normal;
+    //       }
+    //     }
+    //   }
+    // }
+    int gotmyId;
     for (int j = 0; j < num_slave_nodes; j++) {
-      if (node_idx == slave_node_indices[j]) {
-        T wall_distance = (node_pos[dim] - location) * normal;
-        if (wall_distance < 0.0) {
-          global_acc[3 * (node_idx) + dim] +=
-              -1 * (1 / node_mass[dim]) * 200E6 * wall_distance * normal;
-        }
-      }
+      // if (node_idx == slave_node_indices[j]) {
+      gotmyId = slave_node_indices[j];
+      break;
+      // }
+    }
+    T wall_distance = (node_pos[dim] - location) * normal;
+    if (wall_distance < 0.0) {
+      global_acc[3 * (gotmyId) + dim] +=
+          -1 * (1 / node_mass[dim]) * wall_distance * norm_stiffness;
     }
   }
 };
