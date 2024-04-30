@@ -89,7 +89,8 @@ class TetrahedralBasis {
   }
 
   template <int dim>
-  static void eval_grad(const T pt[], const T dof[], T grad[]) {
+  static CPPIMPACT_FUNCTION void eval_grad(const T pt[], const T dof[],
+                                           T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
@@ -107,30 +108,6 @@ class TetrahedralBasis {
       }
     }
   }
-
-#ifdef CPPIMPACT_CUDA_BACKEND
-  template <int num_quadrature_pts, int dim>
-  static __device__ void eval_grad(int tid, const T pt[], const T dof[],
-                                   T grad[]) {
-    T Nxi[spatial_dim * nodes_per_element];
-    eval_basis_grad(pt, Nxi);
-
-    for (int k = 0; k < spatial_dim * dim; k++) {
-      grad[k] = 0.0;
-    }
-
-    int i = tid / num_quadrature_pts;  // node index
-    int k = tid % num_quadrature_pts;  // quadrature index > dim CAUTION
-    if (i < nodes_per_element && k < dim) {
-      // clang-format off
-      atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i]     * dof[dim * i + k]);
-      atomicAdd(&grad[spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
-      atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
-      // clang-format on
-    }
-  }
-
-#endif
 
   template <int dim>
   static CPPIMPACT_FUNCTION void add_grad(const T pt[], const T coef[],
