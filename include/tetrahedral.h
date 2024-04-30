@@ -99,12 +99,11 @@ class TetrahedralBasis {
 
     for (int k = 0; k < dim; k++) {
       for (int i = 0; i < nodes_per_element; i++) {
-        grad[spatial_dim * k] += 1.0;
-        // Nxi[spatial_dim * i];  //     * dof[dim * i + k];
-        grad[spatial_dim * k + 1] += 1.0;
-        // Nxi[spatial_dim * i + 1];  // * dof[dim * i + k];
-        grad[spatial_dim * k + 2] += 1.0;
-        // Nxi[spatial_dim * i + 2];  // * dof[dim * i + k];
+        grad[spatial_dim * k] += Nxi[spatial_dim * i] * dof[dim * i + k];
+        grad[spatial_dim * k + 1] +=
+            Nxi[spatial_dim * i + 1] * dof[dim * i + k];
+        grad[spatial_dim * k + 2] +=
+            Nxi[spatial_dim * i + 2] * dof[dim * i + k];
       }
     }
   }
