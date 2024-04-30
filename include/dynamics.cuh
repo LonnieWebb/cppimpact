@@ -317,7 +317,7 @@ class Dynamics {
     // Time Loop
 
     cudaStream_t *streams;
-    int num_c = 1;
+    int num_c = 3;
     streams = new cudaStream_t[num_c];
 
     for (int c = 0; c < num_c; c++) {
@@ -326,9 +326,11 @@ class Dynamics {
 
     while (time <= time_end) {
       cudaMemsetAsync(d_global_acc, T(0.0), sizeof(T) * ndof, streams[0]);
-      cudaMemsetAsync(d_global_dof, T(0.0), sizeof(T) * ndof, streams[0]);
-      cudaMemsetAsync(d_global_mass, T(0.0), sizeof(T) * ndof, streams[0]);
+      cudaMemsetAsync(d_global_dof, T(0.0), sizeof(T) * ndof, streams[1]);
+      cudaMemsetAsync(d_global_mass, T(0.0), sizeof(T) * ndof, streams[2]);
       cudaStreamSynchronize(streams[0]);
+      cudaStreamSynchronize(streams[1]);
+      cudaStreamSynchronize(streams[2]);
       printf("Time: %f\n", time);
 
       update_dof<T>
