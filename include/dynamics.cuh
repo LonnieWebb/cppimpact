@@ -325,13 +325,15 @@ class Dynamics {
     }
 
     while (time <= time_end) {
-      cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
-      cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
-      cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
+      cudaMemsetAsync(d_global_acc, T(0.0), sizeof(T) * ndof, streams[0]);
+      cudaMemsetAsync(d_global_dof, T(0.0), sizeof(T) * ndof, streams[0]);
+      cudaMemsetAsync(d_global_mass, T(0.0), sizeof(T) * ndof, streams[0]);
+      cudaStreamSynchronize(streams[0]);
       printf("Time: %f\n", time);
 
-      update_dof<T><<<ndof_blocks, 32>>>(ndof, dt, d_vel, d_global_dof);
-      cudaDeviceSynchronize();
+      update_dof<T>
+          <<<ndof_blocks, 32, 0, streams[0]>>>(ndof, dt, d_vel, d_global_dof);
+      cudaStreamSynchronize(streams[0]);
 
       update<T, spatial_dim, nodes_per_element>
           <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
