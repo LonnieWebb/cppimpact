@@ -89,8 +89,7 @@ class TetrahedralBasis {
   }
 
   template <int dim>
-  static CPPIMPACT_FUNCTION void eval_grad(const T pt[], const T dof[],
-                                           T grad[]) {
+  static void eval_grad(const T pt[], const T dof[], T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
@@ -111,27 +110,24 @@ class TetrahedralBasis {
   }
 
 #ifdef CPPIMPACT_CUDA_BACKEND
-  template <int dim>
-  static CPPIMPACT_FUNCTION void eval_grad(int tid, const T pt[], const T dof[],
-                                           T grad[]),
-  {
+  template <int num_quadrature_pts, int dim>
+  static __device__ void eval_grad(int tid, const T pt[], const T dof[],
+                                   T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
-    dof_offset = tid * 5;
 
     for (int k = 0; k < spatial_dim * dim; k++) {
       grad[k] = 0.0;
     }
 
-    for (int k = 0; k < dim; k++) {
-      for (int i = 0; i < nodes_per_element; i++) {
-        grad[spatial_dim * k + dof_offset] +=
-            Nxi[spatial_dim * i] * dof[dim * i + k];
-        grad[spatial_dim * k + 1 + dof_offset] +=
-            Nxi[spatial_dim * i + 1] * dof[dim * i + k];
-        grad[spatial_dim * k + 2 + dof_offset] +=
-            Nxi[spatial_dim * i + 2] * dof[dim * i + k];
-      }
+    int i = tid / num_quadrature_pts;  // node index
+    int k = tid % num_quadrature_pts;  // quadrature index > dim CAUTION
+    if (i < nodes_per_element && k < dim) {
+      // clang-format off
+      atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i]     * dof[dim * i + k]);
+      atomicAdd(&grad[spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
+      atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
+      // clang-format on
     }
   }
 
@@ -171,7 +167,7 @@ class TetrahedralBasis {
     N[9] = 2 * L1 * L4;  // 7 from paper
   }
 
-  static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T *pt,
+  static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T* pt,
                                                     T B[]) {
     // Assuming Nxi is in element coordinates and has dimensions [spatial_dim *
     // nodes_per_element] B matrix should have dimensions [6 *
@@ -217,7 +213,7 @@ class TetrahedralBasis {
 
   template <int dof_per_node>
   static CPPIMPACT_FUNCTION void calculate_D_matrix(
-      BaseMaterial<T, dof_per_node> *material, T *D_matrix) {
+      BaseMaterial<T, dof_per_node>* material, T* D_matrix) {
     // Set diagonal components
     D_matrix[0 * 6 + 0] = D_matrix[1 * 6 + 1] = D_matrix[2 * 6 + 2] =
         1 - material->nu;

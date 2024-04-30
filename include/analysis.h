@@ -410,27 +410,39 @@ class FEAnalysis {
       m_i[tid] = 0.0;
     }
 
-    T pt[spatial_dim];
-    T J[spatial_dim * spatial_dim];
+    __shared__ T pts[num_quadrature_pts * spatial_dim];
+    __shared__ T coeff[num_quadrature_pts];
     __shared__ T J[num_quadrature_pts * spatial_dim * spatial_dim];
 
+    int pts_offset = k * spatial_dim;
+    int J_offset = k * spatial_dim * spatial_dim;
+
     __syncthreads();
+
+    // Compute density * weight * detJ for each quadrature point
     if (tid < num_quadrature_pts) {
-      T weight = Quadrature::get_quadrature_pt(tid, pt);
-      // Evaluate the derivative of the spatial dof in the computational
-      // coordinates
-      Basis::template eval_grad<spatial_dim>(tid, pt, element_xloc, J);
+      coeff[k] = Quadrature::get_quadrature_pt(k, pts + pts_offset);
     }
     __syncthreads();
-    if (tid < nodes_per_element) {
-      // Compute the inverse and determinant of the Jacobian matrix
-      T Jinv[spatial_dim * spatial_dim];
-      T detJ = inv3x3(J, Jinv);
 
+    if (tid < nodes_per_elem_num_quad) {
+      // Evaluate the derivative of the spatial dof in the computational
+      // coordinates
+      Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
+          tid, pts + pts_offset, element_xloc, J + J_offset);
+    }
+    __syncthreads();
+
+    if (tid < num_quadrature_pts) {
+      coeff[k] *= det3x3(J + J_offset) * element_density;
+    }
+    __syncthreads();
+
+    if (tid < num_quadrature_pts * nodes_per_element) {
       // Compute the invariants
       T N[nodes_per_element];
-      Basis::eval_basis_PU(pt, N);
-      atomicAdd(&m_i[i], N[i] * weight * detJ * element_density);
+      Basis::eval_basis_PU(pts + pts_offset, N);
+      atomicAdd(&m_i[i], N[i] * coeff[k]);
     }
 
     __syncthreads();

@@ -284,9 +284,9 @@ class Dynamics {
     constexpr int nodes_per_elem_num_quad =
         nodes_per_element * num_quadrature_pts;
 
-    T vel_i = new T[ndof];
-    T global_mass = new T[ndof];
-    T global_acc = new T[ndof];
+    T *vel_i = new T[ndof];
+    T *global_mass = new T[ndof];
+    T *global_acc = new T[ndof];
 
     update<T, spatial_dim, nodes_per_element>
         <<<mesh->num_elements, threads_per_block>>>(
@@ -372,7 +372,7 @@ class Dynamics {
         cudaStreamSynchronize(streams[0]);
         cudaStreamSynchronize(streams[1]);
         cudaStreamSynchronize(streams[2]);
-        export_to_vtk(timestep, vel_i, global_acc, global_mass);
+        // export_to_vtk(timestep, vel_i, global_acc, global_mass);
       };
 
       time += dt;

@@ -189,7 +189,7 @@ class Dynamics {
   //   }
   // }
 
-  void solve(double dt, double time_end) {
+  void solve(double dt, double time_end, int export_interval) {
     // Perform a dynamic analysis. The algorithm is staggered as follows:
     // This assumes that the initial u, v, a and fext are already initialized
     // at nodes.
@@ -284,7 +284,9 @@ class Dynamics {
         vel_i[i] = vel[i] - 0.5 * dt * global_acc[i];
       }
 
-      export_to_vtk(timestep, vel_i, global_acc, global_mass);
+      if (timestep % export_interval == 0) {
+        export_to_vtk(timestep, vel_i, global_acc, global_mass);
+      }
       time += dt;
       timestep += 1;
     }
