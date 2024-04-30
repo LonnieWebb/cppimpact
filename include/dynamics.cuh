@@ -315,6 +315,15 @@ class Dynamics {
     T time = 0.0;
     int timestep = 0;
     // Time Loop
+
+    cudaStream_t *streams;
+    int num_c = 1;
+    streams = new cudaStream_t[num_c];
+
+    for (int c = 0; c < num_c; c++) {
+      cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
+    }
+
     while (time <= time_end) {
       cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
       cudaMemset(d_global_dof, T(0.0), sizeof(T) * ndof);
@@ -325,18 +334,19 @@ class Dynamics {
       cudaDeviceSynchronize();
 
       update<T, spatial_dim, nodes_per_element>
-          <<<mesh->num_elements, threads_per_block>>>(
+          <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
               mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
               d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass);
-      cudaDeviceSynchronize();
+      cudaStreamSynchronize(streams[0]);
 
-      external_forces<T><<<node_blocks, 32>>>(mesh->num_nodes, d_wall,
-                                              d_global_xloc, d_global_dof,
-                                              d_global_mass, d_global_acc);
-      cudaDeviceSynchronize();
+      external_forces<T><<<node_blocks, 32, 0, streams[0]>>>(
+          mesh->num_nodes, d_wall, d_global_xloc, d_global_dof, d_global_mass,
+          d_global_acc);
+      cudaStreamSynchronize(streams[0]);
 
-      timeloop_update<T><<<ndof_blocks, 32>>>(
+      timeloop_update<T><<<ndof_blocks, 32, 0, streams[0]>>>(
           ndof, dt, d_global_xloc, d_vel, d_global_acc, d_vel_i, d_global_dof);
+      cudaStreamSynchronize(streams[0]);
 
       // TODO: exporting
       // if (timestep % export_interval == 0) {
@@ -346,6 +356,11 @@ class Dynamics {
       time += dt;
       timestep += 1;
     }
+
+    for (int c = 0; c < num_c; c++) {
+      cudaStreamDestroy(streams[c]);
+    }
+    delete[] streams;
 
     deallocate();
   }

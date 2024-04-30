@@ -66,11 +66,12 @@ __global__ void update(int num_elements, T dt,
   Analysis::element_mass_matrix(tid, d_material->rho, element_xloc, element_dof,
                                 element_mass_matrix_diagonals);
 
+  int j = tid / 3;  // 0 ~ nodes_per_element - 1
+  int k = tid % 3;  // 0, 1, 2
+  int node = this_element_nodes[j];
+
   // assemble global mass matrix
   if (tid < dof_per_element) {
-    int j = tid / 3;  // 0 ~ nodes_per_element - 1
-    int k = tid % 3;  // 0, 1, 2
-    int node = this_element_nodes[j];
     atomicAdd(&d_global_mass[3 * node + k],
               element_mass_matrix_diagonals[3 * j + k]);
   }
@@ -93,8 +94,7 @@ __global__ void update(int num_elements, T dt,
   }
 
   Analysis::calculate_f_internal(tid, element_xloc, element_dof,
-                                 element_internal_forces,
-                                 d_material);  // TODO: Fix d_material
+                                 element_internal_forces, d_material);
   __syncthreads();
 
   // Calculate element acceleration
@@ -105,9 +105,6 @@ __global__ void update(int num_elements, T dt,
 
   // assemble global acceleration
   if (tid < dof_per_element) {
-    int j = tid / 3;  // 0 ~ nodes_per_element - 1
-    int k = tid % 3;  // 0, 1, 2
-    int node = this_element_nodes[j];
     atomicAdd(&d_global_acc[3 * node + k], element_acc[3 * j + k]);
   }
   __syncthreads();
@@ -122,19 +119,20 @@ __global__ void external_forces(int num_nodes,
   int tid = threadIdx.x;
   int bid = blockIdx.x;
   int node_idx = tid * bid;
+  int node3 = 3 * node_idx;
+  int node3p1 = 3 * node_idx + 1;
+  int node3p2 = 3 * node_idx + 2;
 
   if (node_idx < num_nodes) {
     T node_pos[3];
-    node_pos[0] = d_global_xloc[3 * node_idx] + d_global_dof[3 * node_idx];
-    node_pos[1] =
-        d_global_xloc[3 * node_idx + 1] + d_global_dof[3 * node_idx + 1];
-    node_pos[2] =
-        d_global_xloc[3 * node_idx + 2] + d_global_dof[3 * node_idx + 2];
+    node_pos[0] = d_global_xloc[node3] + d_global_dof[node3];
+    node_pos[1] = d_global_xloc[node3p1] + d_global_dof[node3p1];
+    node_pos[2] = d_global_xloc[node3p2] + d_global_dof[node3p2];
 
     T node_mass[3];
-    node_mass[0] = d_global_mass[3 * node_idx];
-    node_mass[1] = d_global_mass[3 * node_idx + 1];
-    node_mass[2] = d_global_mass[3 * node_idx + 2];
+    node_mass[0] = d_global_mass[node3];
+    node_mass[1] = d_global_mass[node3p1];
+    node_mass[2] = d_global_mass[node3p2];
 
     d_wall->detect_contact(d_global_acc, node_idx, node_pos, node_mass);
   }

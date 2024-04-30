@@ -19,7 +19,7 @@
 
 int main(int argc, char *argv[]) {
 #ifdef CPPIMPACT_CUDA_BACKEND
-  using T = float;
+  using T = double;
 #else
   using T = double;
 #endif
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/Dynamics Cube Coarse.inp");
+  std::string filename("../input/Dynamics Cube Mid.inp");
   Mesh<T> tensile;
 
   // Material Properties
