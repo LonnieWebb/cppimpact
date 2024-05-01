@@ -96,7 +96,7 @@ __global__ void update(int num_elements, T dt,
   }
 
   // Analysis::calculate_f_internal(tid, element_xloc, element_dof,
-  //  element_internal_forces, d_material);
+  //                                element_internal_forces, d_material);
   __syncthreads();
 
   // Calculate element acceleration

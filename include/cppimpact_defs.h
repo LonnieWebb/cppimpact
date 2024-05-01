@@ -3,6 +3,8 @@
 #ifdef CPPIMPACT_CUDA_BACKEND
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+
+// #include <nvtx3/nvtx3.hpp>
 #define CPPIMPACT_FUNCTION __host__ __device__
 
 // Usage: put gpuErrchk(...) around cuda function calls

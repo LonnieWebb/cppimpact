@@ -13,6 +13,8 @@ if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
   set(GPU_ARCHS "${GPU_ARCHS};80")
 endif()
 
+set(CPPIMPACT_VNTX_PATH "${CMAKE_SOURCE_DIR}/extern/NVTX/c")
+
 find_package(LAPACK REQUIRED)
 
 # C++ target
@@ -25,3 +27,4 @@ set_target_properties(gpu_test PROPERTIES CUDA_ARCHITECTURES ${GPU_ARCHS})
 set_target_properties(gpu_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_compile_definitions(gpu_test PRIVATE -DCPPIMPACT_CUDA_BACKEND)
 target_compile_options(gpu_test PRIVATE -G)  # device debug
+# target_link_libraries(gpu_test PRIVATE nvtx3-cpp)

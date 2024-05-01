@@ -3,6 +3,30 @@
 
 #include "cppimpact_defs.h"
 
+// we need 3 threads
+template <typename T>
+__device__ inline void det3x3_gpu(int tid, const T A[], T& det) {
+  constexpr int det_indices[3][4] = {{0, 4, 3, 1}, {0, 5, 3, 2}, {1, 5, 2, 4}};
+  constexpr int det_coeffs[3] = {8, 7, 6};
+  constexpr int det_signs[3] = {1, -1, 1};
+  atomicAdd(&det, det_signs[tid] * A[det_coeffs[tid]] *
+                      (A[det_indices[tid][0]] * A[det_indices[tid][1]] -
+                       A[det_indices[tid][2]] * A[det_indices[tid][3]]));
+}
+
+// we need 9 threads
+template <typename T>
+__device__ inline void inv3x3_gpu(int tid, const T A[], T Ainv[], T det) {
+  constexpr int indices[9][4] = {{4, 8, 5, 7}, {1, 8, 2, 7}, {1, 5, 2, 4},
+                                 {3, 8, 5, 6}, {0, 8, 2, 6}, {0, 5, 2, 3},
+                                 {3, 7, 4, 6}, {0, 7, 1, 6}, {0, 4, 1, 3}};
+
+  Ainv[tid] = (tid % 2 ? -1 : 1) *
+              (A[indices[tid][0]] * A[indices[tid][1]] -
+               A[indices[tid][2]] * A[indices[tid][3]]) /
+              det;
+}
+
 template <typename T>
 CPPIMPACT_FUNCTION inline T inv3x3(const T A[], T Ainv[]) {
   T det =
@@ -22,14 +46,6 @@ CPPIMPACT_FUNCTION inline T inv3x3(const T A[], T Ainv[]) {
   Ainv[7] = -(A[0] * A[7] - A[1] * A[6]) * detinv;
   Ainv[8] = (A[0] * A[4] - A[1] * A[3]) * detinv;
 
-  return det;
-}
-
-template <typename T>
-CPPIMPACT_FUNCTION inline T inv3x3(const T A[]) {
-  T det =
-      (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
-       A[6] * (A[1] * A[5] - A[2] * A[4]));
   return det;
 }
 

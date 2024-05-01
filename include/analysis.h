@@ -225,9 +225,6 @@ class FEAnalysis {
     // coordinates
     Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
         tid, pts + pts_offset, element_xloc, J + J_offset);
-    // Basis::template eval_grad<spatial_dim>(pts + pts_offset, element_xloc,
-    //  J + J_offset);
-
     __syncthreads();
 
     if (tid < num_quadrature_pts) {
@@ -282,32 +279,61 @@ class FEAnalysis {
   static __device__ void calculate_f_internal(
       int tid, const T *element_xloc, const T *element_dof, T *f_internal,
       BaseMaterial<T, dof_per_node> *material) {
+    // int i = tid / num_quadrature_pts;  // node index
+    int k = tid % num_quadrature_pts;  // quadrature index
+
     T pt[spatial_dim];
     T sigma[6];
     int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
     // contiguous for each quadrature points
-    __shared__ T weights[num_quadrature_pts];
-    __shared__ T detJs[num_quadrature_pts];
+    __shared__ T pts[num_quadrature_pts * spatial_dim];
+    __shared__ T dets[num_quadrature_pts];
+    __shared__ T wdetJs[num_quadrature_pts];
     __shared__ T BTS[num_quadrature_pts * dof_per_element];
+    __shared__ T J[num_quadrature_pts * spatial_dim * spatial_dim];
+    __shared__ T Jinv[num_quadrature_pts * spatial_dim * spatial_dim];
+
+    int constexpr spatial_dim_2 = spatial_dim * spatial_dim;
+    int pts_offset = k * spatial_dim;
+    int J_offset = k * spatial_dim_2;
 
     if (tid < num_quadrature_pts) {  // tid = quad point index
+      wdetJs[tid] =
+          Quadrature::template get_quadrature_pt<T>(k, pts + pts_offset);
+    }
+    __syncthreads();
 
-      weights[tid] = Quadrature::template get_quadrature_pt<T>(tid, pt);
+    // Evaluate the derivative of the spatial dof in the computational
+    // coordinates
+    Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
+        tid, pts + pts_offset, element_xloc, J + J_offset);
+    __syncthreads();
 
-      // Evaluate the derivative of the spatial dof in the computational
-      // coordinates
-      T J[spatial_dim * spatial_dim];
-      Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
+    if (tid < num_quadrature_pts * spatial_dim) {
+      int k = tid / spatial_dim;  // quad index
+      int i = tid % spatial_dim;  // 0 ~ 2
+      det3x3_gpu(i, J + J_offset, dets[k]);
+    }
 
+    __syncthreads();
+
+    if (tid < num_quadrature_pts * spatial_dim_2) {
       // Compute the inverse and determinant of the Jacobian matrix
-      T Jinv[spatial_dim * spatial_dim];
-      detJs[tid] = inv3x3(J, Jinv);
+      int k = tid / spatial_dim_2;  // quad index
+      int i = tid % spatial_dim_2;  // 0 ~ 8
+      inv3x3_gpu(i, J + J_offset, Jinv + J_offset, dets[k]);
+      if (i == 0) {
+        wdetJs[k] *= dets[k];
+      }
+    }
+    __syncthreads();
 
+    if (tid < num_quadrature_pts) {
       T B_matrix[6 * dof_per_element];
       memset(B_matrix, 0, 6 * dof_per_element * sizeof(T));
 
-      Basis::calculate_B_matrix(Jinv, pt, B_matrix);
+      Basis::calculate_B_matrix(Jinv + J_offset, pts + pts_offset, B_matrix);
 
       T D_matrix[6 * 6];
       memset(D_matrix, 0, 6 * 6 * sizeof(T));
@@ -349,7 +375,7 @@ class FEAnalysis {
       int offset = k * dof_per_element;
       for (int d = 0; d < spatial_dim; d++) {
         atomicAdd(&f_internal[spatial_dim * i + d],
-                  weights[k] * detJs[k] * BTS[offset + spatial_dim * i + d]);
+                  wdetJs[k] * BTS[offset + spatial_dim * i + d]);
       }
     }
   }
@@ -431,9 +457,10 @@ class FEAnalysis {
 // template __global__ void energy_kernel<T, nodes_per_element>(const int
 // *element_nodes,
 //                                                              const T *xloc,
-//                                                              const T *dof, T
-//                                                              *total_energy, T
-//                                                              *C1, T *D1);
+//                                                              const T *dof,
+//                                                              T
+//                                                              *total_energy,
+//                                                              T *C1, T *D1);
 
 // T J_neo = det3x3(F); // Compute determinant of F to get J
 // T lnJ = std::log(detJ);
@@ -461,9 +488,9 @@ class FEAnalysis {
 //   B_matrix[j] = 0.0;
 // }
 
-// T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single node
-// T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P for a
-// single node
+// T B_node[6 * 3];  // Temporary storage for a 6x3 block of B for a single
+// node T BP_node[3 * 3]; // Temporary storage for the result of B_node^T * P
+// for a single node
 
 // // Initialize B_node and BP_node to -5.0
 // for (int j = 0; j < 18; ++j)
