@@ -115,22 +115,31 @@ class TetrahedralBasis {
                                    T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
+    const int nodes_per_elem_num_quad = nodes_per_element * num_quadrature_pts;
 
-    for (int k = 0; k < spatial_dim * dim; k++) {
-      grad[k] = 0.0;
+    if (tid < nodes_per_elem_num_quad) {
+      for (int k = 0; k < spatial_dim * dim; k++) {
+        grad[k] = 0.0;
+      }
     }
+    __syncthreads();
 
-    int i = tid / num_quadrature_pts;  // node index
-    // int k = tid % num_quadrature_pts;  // quadrature index > dim CAUTION
-    if (i < nodes_per_element) {
-      for (int k = 0; k < dim; k++) {
+    if (tid < nodes_per_elem_num_quad) {
+      int i = tid / num_quadrature_pts;    // node index
+      int k = tid % (num_quadrature_pts);  // quadrature index > dim CAUTION
+      if (i < nodes_per_element && k < dim) {
+        // for (int k = 0; k < dim; k++) {
         // clang-format off
       atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i]     * dof[dim * i + k]);
       atomicAdd(&grad[spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
       atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
         // clang-format on
       }
+      if (i >= nodes_per_element) {
+        printf("*");
+      }
     }
+    // }
   }
 
 #endif

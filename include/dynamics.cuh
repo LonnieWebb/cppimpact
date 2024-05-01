@@ -320,6 +320,8 @@ class Dynamics {
 
     array_to_txt<T>("gpu_vel.txt", vel, ndof);
 
+    return;
+
     T time = 0.0;
     int timestep = 0;
     // Time Loop
