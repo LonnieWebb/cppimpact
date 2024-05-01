@@ -120,7 +120,7 @@ __global__ void external_forces(int num_nodes,
                                 const T *d_global_mass, T *d_global_acc) {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
-  int node_idx = tid * bid;
+  int node_idx = blockDim.x * bid + tid;
   int node3 = 3 * node_idx;
   int node3p1 = 3 * node_idx + 1;
   int node3p2 = 3 * node_idx + 2;
@@ -151,7 +151,7 @@ template <typename T>
 __global__ void update_velocity(int ndof, T dt, T *d_vel, T *d_global_acc) {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
-  int ndof_idx = tid * bid;
+  int ndof_idx = blockDim.x * bid + tid;
   if (ndof_idx < ndof) {
     d_vel[ndof_idx] += 0.5 * dt * d_global_acc[ndof_idx];
   }
@@ -162,7 +162,7 @@ template <typename T>
 __global__ void update_dof(int ndof, T dt, T *d_vel, T *d_global_dof) {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
-  int ndof_idx = tid * bid;
+  int ndof_idx = blockDim.x * bid + tid;
   if (ndof_idx < ndof) {
     d_global_dof[ndof_idx] = dt * d_vel[ndof_idx];
   }
@@ -174,7 +174,7 @@ __global__ void timeloop_update(int ndof, T dt, T *d_global_xloc, T *d_vel,
                                 T *d_global_acc, T *d_vel_i, T *d_global_dof) {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
-  int ndof_idx = tid * bid;
+  int ndof_idx = blockDim.x * bid + tid;
   if (ndof_idx < ndof) {
     d_global_xloc[ndof_idx] += d_global_dof[ndof_idx];
     d_vel[ndof_idx] += dt * d_global_acc[ndof_idx];
