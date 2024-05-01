@@ -428,8 +428,8 @@ class FEAnalysis {
     if (tid < nodes_per_elem_num_quad) {
       // Evaluate the derivative of the spatial dof in the computational
       // coordinates
-      Basis::template eval_grad<spatial_dim>(pts + pts_offset, element_xloc,
-                                             J + J_offset);
+      Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
+          tid, pts + pts_offset, element_xloc, J + J_offset);
     }
     __syncthreads();
 
