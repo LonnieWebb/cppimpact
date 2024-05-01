@@ -66,7 +66,8 @@ class Dynamics {
     }
   }
 
-  void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i) {
+  void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i,
+                     T *global_xloc) {
     const std::string directory = "../gpu_output";
     const std::string filename =
         directory + "/simulation_" + std::to_string(timestep) + ".vtk";
@@ -309,6 +310,10 @@ class Dynamics {
 
     cudaMemcpy(global_acc, d_global_acc, sizeof(T) * ndof,
                cudaMemcpyDeviceToHost);
+    cudaMemcpy(global_xloc, d_global_xloc, sizeof(T) * ndof,
+               cudaMemcpyDeviceToHost);
+    cudaMemcpy(global_mass, d_global_mass, sizeof(T) * ndof,
+               cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
 
     update_velocity<T><<<ndof_blocks, 32>>>(ndof, dt, d_vel, d_global_acc);
@@ -317,6 +322,8 @@ class Dynamics {
     }
 
     array_to_txt<T>("gpu_vel.txt", vel, ndof);
+    array_to_txt<T>("gpu_xloc.txt", global_xloc, ndof);
+
     T time = 0.0;
     int timestep = 0;
     // Time Loop
@@ -373,7 +380,7 @@ class Dynamics {
         cudaStreamSynchronize(streams[1]);
         cudaStreamSynchronize(streams[2]);
         cudaStreamSynchronize(streams[3]);
-        export_to_vtk(timestep, vel_i, global_acc, global_mass);
+        export_to_vtk(timestep, vel_i, global_acc, global_mass, global_xloc);
       };
 
       time += dt;
