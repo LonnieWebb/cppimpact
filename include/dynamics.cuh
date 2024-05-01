@@ -67,8 +67,6 @@ class Dynamics {
   }
 
   void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i) {
-    if (timestep % 50 != 0) return;
-
     const std::string directory = "../gpu_output";
     const std::string filename =
         directory + "/simulation_" + std::to_string(timestep) + ".vtk";
@@ -319,15 +317,12 @@ class Dynamics {
     }
 
     array_to_txt<T>("gpu_vel.txt", vel, ndof);
-
-    return;
-
     T time = 0.0;
     int timestep = 0;
     // Time Loop
 
     cudaStream_t *streams;
-    int num_c = 3;
+    int num_c = 4;
     streams = new cudaStream_t[num_c];
 
     for (int c = 0; c < num_c; c++) {
@@ -371,10 +366,14 @@ class Dynamics {
                         cudaMemcpyDeviceToHost, streams[1]);
         cudaMemcpyAsync(global_mass, d_global_mass, ndof * sizeof(T),
                         cudaMemcpyDeviceToHost, streams[2]);
+        cudaMemcpyAsync(global_xloc, d_global_xloc, ndof * sizeof(T),
+                        cudaMemcpyDeviceToHost, streams[3]);
+
         cudaStreamSynchronize(streams[0]);
         cudaStreamSynchronize(streams[1]);
         cudaStreamSynchronize(streams[2]);
-        // export_to_vtk(timestep, vel_i, global_acc, global_mass);
+        cudaStreamSynchronize(streams[3]);
+        export_to_vtk(timestep, vel_i, global_acc, global_mass);
       };
 
       time += dt;

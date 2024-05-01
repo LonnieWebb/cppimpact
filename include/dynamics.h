@@ -67,8 +67,6 @@ class Dynamics {
   }
 
   void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i) {
-    if (timestep % 50 != 0) return;
-
     const std::string directory = "../cpu_output";
     const std::string filename =
         directory + "/simulation_" + std::to_string(timestep) + ".vtk";

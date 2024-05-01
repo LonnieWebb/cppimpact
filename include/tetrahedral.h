@@ -125,21 +125,20 @@ class TetrahedralBasis {
     __syncthreads();
 
     if (tid < nodes_per_elem_num_quad) {
-      int i = tid / num_quadrature_pts;    // node index
-      int k = tid % (num_quadrature_pts);  // quadrature index > dim CAUTION
+      int i = tid / num_quadrature_pts;  // node index
+      int k = tid % (dim);               // quadrature index > dim
       if (i < nodes_per_element && k < dim) {
-        // for (int k = 0; k < dim; k++) {
-        // clang-format off
-      atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i]     * dof[dim * i + k]);
-      atomicAdd(&grad[spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
-      atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
-        // clang-format on
-      }
-      if (i >= nodes_per_element) {
-        printf("*");
+        for (int k = 0; k < dim; k++) {
+          // clang-format off
+        atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i]     *
+        dof[dim * i + k]); atomicAdd(&grad[spatial_dim * k + 1],
+        Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
+        atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] *
+        dof[dim * i + k]);
+          // clang-format on
+        }
       }
     }
-    // }
   }
 
 #endif
@@ -180,8 +179,8 @@ class TetrahedralBasis {
 
   static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T* pt,
                                                     T B[]) {
-    // Assuming Nxi is in element coordinates and has dimensions [spatial_dim *
-    // nodes_per_element] B matrix should have dimensions [6 *
+    // Assuming Nxi is in element coordinates and has dimensions [spatial_dim
+    // * nodes_per_element] B matrix should have dimensions [6 *
     // (3*nodes_per_element)], flattened into 1D array
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);

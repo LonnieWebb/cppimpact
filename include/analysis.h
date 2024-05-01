@@ -429,6 +429,8 @@ class FEAnalysis {
     // coordinates
     Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
         tid, pts + pts_offset, element_xloc, J + J_offset);
+    // Basis::template eval_grad<spatial_dim>(pts + pts_offset, element_xloc,
+    //  J + J_offset);
 
     __syncthreads();
 
