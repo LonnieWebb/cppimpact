@@ -44,6 +44,73 @@ class TetrahedralBasis {
   static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = 10;
 
+  template <int num_quadrature_pts, int dof_per_element>
+  static __device__ void eval_basis_grad_gpu(
+      int tid, const T pt[], T Nxis[num_quadrature_pts][dof_per_element]) {
+    // clang-format off
+    constexpr T coeffs[30][4] = {
+        {4.0, 4.0, 4.0, -3.0},
+        {4.0, 4.0, 4.0, -3.0},
+        {4.0, 4.0, 4.0, -3.0},
+
+        {4.0, 0.0, 0.0, -1.0},
+        {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0},
+
+        {0.0, 0.0, 0.0, 0.0},
+        {0.0, 4.0, 0.0, -1.0},
+        {0.0, 0.0, 0.0, 0.0},
+
+        {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 4.0, -1.0},
+
+        {-8.0, -4.0, -4.0, 4.0},
+        {-4.0, 0.0, 0.0, 0.0},
+        {-4.0, 0.0, 0.0, 0.0},
+
+        {0.0, 4.0, 0.0, 0.0},
+        {4.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0},
+
+        {0.0, -4.0, 0.0, 0.0},
+        {-4.0, -8.0, -4.0, 4.0},
+        {0.0, -4.0, 0.0, 0.0},
+
+        {0.0, 0.0, -4.0, 0.0},
+        {0.0, 0.0, -4.0, 0.0},
+        {-4.0, -4.0, -8.0, 4.0},
+
+        {0.0, 0.0, 4.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0},
+        {4.0, 0.0, 0.0, 0.0},
+
+        {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 4.0, 0.0},
+        {0.0, 4.0, 0.0, 0.0}
+    };
+    // clang-format on
+
+    int Nxi_index = tid / nodes_per_element;
+    int Nxi_offset = tid % nodes_per_element;
+    int Nxi_offset_2 = Nxi_offset + nodes_per_element;
+    int Nxi_offset_3 = Nxi_offset + nodes_per_element * 2;
+    if (tid < nodes_per_element * num_quadrature_pts) {
+      Nxis[Nxi_index][Nxi_offset] =
+          coeffs[Nxi_offset][0] * pt[0] + coeffs[Nxi_offset][1] * pt[1] +
+          coeffs[Nxi_offset][2] * pt[2] + coeffs[Nxi_offset][3];
+      Nxis[Nxi_index][Nxi_offset_2] =
+          coeffs[Nxi_offset_2][0] * pt[0] + coeffs[Nxi_offset_2][1] * pt[1] +
+          coeffs[Nxi_offset_2][2] * pt[2] + coeffs[Nxi_offset_2][3];
+      if (Nxi_offset_3 < 30) {
+        Nxis[Nxi_index][Nxi_offset_3] =
+            coeffs[Nxi_offset_3][0] * pt[0] + coeffs[Nxi_offset_3][1] * pt[1] +
+            coeffs[Nxi_offset_3][2] * pt[2] + coeffs[Nxi_offset_3][3];
+      }
+    }
+    __syncthreads();
+  }
+
   static CPPIMPACT_FUNCTION void eval_basis_grad(const T pt[], T Nxi[]) {
     // Corner node derivatives
     Nxi[0] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
@@ -141,6 +208,29 @@ class TetrahedralBasis {
     }
   }
 
+  template <int num_quadrature_pts, int dim>
+  static __device__ void eval_grad_gpu(int tid, const T pt[], const T dof[],
+                                       T grad[], T Nxi[]) {
+    const int nodes_per_elem_num_quad = nodes_per_element * num_quadrature_pts;
+
+    if (tid < spatial_dim * dim * num_quadrature_pts) {
+      grad[tid] = 0.0;
+    }
+    __syncthreads();
+
+    if (tid < nodes_per_elem_num_quad) {
+      int i = tid / num_quadrature_pts;  // node index
+      if (i < nodes_per_element) {
+        for (int k = 0; k < dim; k++) {
+          // clang-format off
+          atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i] *     dof[dim * i + k]);
+          atomicAdd(&grad[spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
+          atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
+          // clang-format on
+        }
+      }
+    }
+  }
 #endif
 
   template <int dim>

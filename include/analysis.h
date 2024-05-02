@@ -276,7 +276,7 @@ class FEAnalysis {
   static __device__ void calculate_f_internal_gpu(
       int tid, const T *element_xloc, const T *element_dof, T *f_internal,
       BaseMaterial<T, dof_per_node> *material) {
-    // int i = tid / num_quadrature_pts;  // node index
+    int i = tid / num_quadrature_pts;  // node index
     int k = tid % num_quadrature_pts;  // quadrature index
 
     T sigma[6];
@@ -299,10 +299,23 @@ class FEAnalysis {
     }
     __syncthreads();
 
+    __shared__ T Nxis[num_quadrature_pts][dof_per_element];
+
+    if (tid < num_quadrature_pts * nodes_per_element) {
+      for (int j = 0; j < spatial_dim; j++) {
+        Nxis[k][i + j * nodes_per_element] = 0.0;
+      }
+    }
+    __syncthreads();
+
+    Basis::template eval_basis_grad_gpu<num_quadrature_pts, dof_per_element>(
+        tid, pts + pts_offset, Nxis);
+    __syncthreads();
+
     // Evaluate the derivative of the spatial dof in the computational
     // coordinates
-    Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
-        tid, pts + pts_offset, element_xloc, J + J_offset);
+    Basis::template eval_grad_gpu<num_quadrature_pts, spatial_dim>(
+        tid, pts + pts_offset, element_xloc, J + J_offset, Nxis[k]);
     __syncthreads();
 
     if (tid < num_quadrature_pts * spatial_dim) {
