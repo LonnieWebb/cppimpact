@@ -4,6 +4,8 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
+#include <iostream>
+
 // #include <nvtx3/nvtx3.hpp>
 #define CPPIMPACT_FUNCTION __host__ __device__
 
@@ -18,6 +20,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
     if (abort) exit(code);
   }
 }
+
+void cuda_show_kernel_error() {
+  auto err = cudaGetLastError();
+  std::cout << "error code: " << err << "\n";
+  std::cout << "error string: " << cudaGetErrorString(err) << "\n";
+}
+
 #else
 #define CPPIMPACT_FUNCTION
 #endif

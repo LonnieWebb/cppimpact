@@ -17,6 +17,10 @@ set(CPPIMPACT_VNTX_PATH "${CMAKE_SOURCE_DIR}/extern/NVTX/c")
 
 find_package(LAPACK REQUIRED)
 
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  add_definitions(-DCPPIMPACT_DEBUG_MODE)
+endif()
+
 # C++ target
 add_executable(cpu_test test.cu)
 target_link_libraries(cpu_test ${LAPACK_LIBRARIES})

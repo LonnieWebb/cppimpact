@@ -68,9 +68,12 @@ __global__ void update(int num_elements, T dt,
                                     element_dof, element_mass_matrix_diagonals,
                                     nodes_per_elem_num_quad);
 
+  int node = INT_MAX;
   int j = tid / 3;  // 0 ~ nodes_per_element - 1
   int k = tid % 3;  // 0, 1, 2
-  int node = this_element_nodes[j];
+  if (tid < dof_per_element) {
+    node = this_element_nodes[j];
+  }
 
   // assemble global mass matrix
   if (tid < dof_per_element) {

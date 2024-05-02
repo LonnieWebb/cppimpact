@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "basematerial.h"
+#include "cppimpact_defs.h"
 #include "cppimpact_utils.h"
 #include "dynamics_kernels.cuh"
 #include "mesh.h"
@@ -304,9 +305,6 @@ class Dynamics {
 
     // TODO: delete this
     cudaDeviceSynchronize();
-    auto err = cudaGetLastError();
-    std::cout << "error code: " << err << "\n";
-    std::cout << "error string: " << cudaGetErrorString(err) << "\n";
 
     cudaMemcpy(global_acc, d_global_acc, sizeof(T) * ndof,
                cudaMemcpyDeviceToHost);
@@ -335,6 +333,10 @@ class Dynamics {
     for (int c = 0; c < num_c; c++) {
       cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
     }
+
+#ifdef CPPIMPACT_DEBUG_MODE
+    cuda_show_kernel_error();
+#endif
 
     while (time <= time_end) {
       cudaMemsetAsync(d_global_acc, T(0.0), sizeof(T) * ndof, streams[0]);
@@ -385,6 +387,10 @@ class Dynamics {
 
       time += dt;
       timestep += 1;
+
+#ifdef CPPIMPACT_DEBUG_MODE
+      cuda_show_kernel_error();
+#endif
     }
 
     for (int c = 0; c < num_c; c++) {
