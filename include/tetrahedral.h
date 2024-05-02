@@ -44,9 +44,37 @@ class TetrahedralBasis {
   static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = 10;
 
+  // TODO: this now only uses 30 threads out of 64
+  template <int num_quadrature_pts, int dof_per_element>
+  static __device__ void eval_basis_grad_gpu_new(
+      int tid, int q, const T pts[],
+      T Nxis[num_quadrature_pts][dof_per_element]) {
+
+  constexpr  T coeffs[30][4] = {
+      {4.0, 4.0, 4.0, -3.0},   {4.0, 4.0, 4.0, -3.0},   {4.0, 4.0, 4.0,
+      -3.0}, {4.0, 0.0, 0.0, -1.0},   {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0,
+      0.0, 0.0}, {0.0, 0.0, 0.0, 0.0},    {0.0, 4.0, 0.0, -1.0},   {0.0, 0.0,
+      0.0, 0.0}, {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0, 0.0},    {0.0,
+      0.0, 4.0, -1.0},
+      {-8.0, -4.0, -4.0, 4.0}, {-4.0, 0.0, 0.0, 0.0},   {-4.0, 0.0, 0.0,
+      0.0}, {0.0, 4.0, 0.0, 0.0},    {4.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0,
+      0.0}, {0.0, -4.0, 0.0, 0.0},   {-4.0, -8.0, -4.0, 4.0}, {0.0, -4.0,
+      0.0, 0.0}, {0.0, 0.0, -4.0, 0.0},   {0.0, 0.0, -4.0, 0.0},   {-4.0,
+      -4.0, -8.0, 4.0}, {0.0, 0.0, 4.0, 0.0},    {0.0, 0.0, 0.0, 0.0}, {4.0,
+      0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 4.0, 0.0},
+      {0.0, 4.0, 0.0, 0.0}};
+
+    if (tid < 30) {
+      const T* pt = pts + q * spatial_dim;
+      Nxis[q][tid] = coeffs[tid][0] * pt[0] + coeffs[tid][1] * pt[1] +
+                     coeffs[tid][2] * pt[2] + coeffs[tid][3];
+    }
+  }
+
+  // Evaluate the gradients of all basis functions on all quadrature points
   template <int num_quadrature_pts, int dof_per_element>
   static __device__ void eval_basis_grad_gpu(
-      int tid, const T pt[], T Nxis[num_quadrature_pts][dof_per_element]) {
+      int tid, const T pts[], T Nxis[num_quadrature_pts][dof_per_element]) {
     // clang-format off
     constexpr T coeffs[30][4] = {
         {4.0, 4.0, 4.0, -3.0},
@@ -92,21 +120,24 @@ class TetrahedralBasis {
     // clang-format on
 
     int Nxi_index = tid / nodes_per_element;
-    int Nxi_offset = tid % nodes_per_element;
-    int Nxi_offset_2 = Nxi_offset + nodes_per_element;
-    int Nxi_offset_3 = Nxi_offset + nodes_per_element * 2;
+    int Nxi_offset_1 = tid % nodes_per_element;
+    int Nxi_offset_2 = Nxi_offset_1 + nodes_per_element;
+    int Nxi_offset_3 = Nxi_offset_1 + nodes_per_element * 2;
     if (tid < nodes_per_element * num_quadrature_pts) {
-      Nxis[Nxi_index][Nxi_offset] =
-          coeffs[Nxi_offset][0] * pt[0] + coeffs[Nxi_offset][1] * pt[1] +
-          coeffs[Nxi_offset][2] * pt[2] + coeffs[Nxi_offset][3];
-      Nxis[Nxi_index][Nxi_offset_2] =
-          coeffs[Nxi_offset_2][0] * pt[0] + coeffs[Nxi_offset_2][1] * pt[1] +
-          coeffs[Nxi_offset_2][2] * pt[2] + coeffs[Nxi_offset_2][3];
+      int pts_offset = (tid % num_quadrature_pts) * spatial_dim;
+      // clang-format off
+        Nxis[Nxi_index][Nxi_offset_1] =
+            coeffs[Nxi_offset_1][0] * pts[pts_offset] + coeffs[Nxi_offset_1][1] * pts[pts_offset + 1] +
+            coeffs[Nxi_offset_1][2] * pts[pts_offset + 2] + coeffs[Nxi_offset_1][3];
+        Nxis[Nxi_index][Nxi_offset_2] =
+            coeffs[Nxi_offset_2][0] * pts[pts_offset] + coeffs[Nxi_offset_2][1] * pts[pts_offset + 1] +
+            coeffs[Nxi_offset_2][2] * pts[pts_offset + 2] + coeffs[Nxi_offset_2][3];
       if (Nxi_offset_3 < 30) {
         Nxis[Nxi_index][Nxi_offset_3] =
-            coeffs[Nxi_offset_3][0] * pt[0] + coeffs[Nxi_offset_3][1] * pt[1] +
-            coeffs[Nxi_offset_3][2] * pt[2] + coeffs[Nxi_offset_3][3];
+            coeffs[Nxi_offset_3][0] * pts[pts_offset] + coeffs[Nxi_offset_3][1] * pts[pts_offset + 1] +
+            coeffs[Nxi_offset_3][2] * pts[pts_offset + 2] + coeffs[Nxi_offset_3][3];
       }
+      // clang-format on
     }
     __syncthreads();
   }
@@ -216,16 +247,23 @@ class TetrahedralBasis {
     if (tid < spatial_dim * dim * num_quadrature_pts) {
       grad[tid] = 0.0;
     }
+    // if (tid < num_quadrature_pts) {
+    //   for (int k = 0; k < spatial_dim * dim; k++) {
+    //     grad[k] = 0.0;
+    //   }
+    // }
     __syncthreads();
 
     if (tid < nodes_per_elem_num_quad) {
       int i = tid / num_quadrature_pts;  // node index
+      int q = tid % num_quadrature_pts;  // quad index
+      int grad_offset = spatial_dim * dim * q;
       if (i < nodes_per_element) {
         for (int k = 0; k < dim; k++) {
           // clang-format off
-          atomicAdd(&grad[spatial_dim * k],     Nxi[spatial_dim * i] *     dof[dim * i + k]);
-          atomicAdd(&grad[spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
-          atomicAdd(&grad[spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
+          atomicAdd(&grad[grad_offset + spatial_dim * k],     Nxi[spatial_dim * i] *     dof[dim * i + k]);
+          atomicAdd(&grad[grad_offset + spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
+          atomicAdd(&grad[grad_offset + spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
           // clang-format on
         }
       }

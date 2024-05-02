@@ -299,6 +299,12 @@ class FEAnalysis {
     }
     __syncthreads();
 
+    // // Evaluate the derivative of the spatial dof in the computational
+    // // coordinates
+    // Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
+    //     tid, pts + pts_offset, element_xloc, J + J_offset);
+    // __syncthreads();
+
     __shared__ T Nxis[num_quadrature_pts][dof_per_element];
 
     if (tid < num_quadrature_pts * nodes_per_element) {
@@ -308,14 +314,17 @@ class FEAnalysis {
     }
     __syncthreads();
 
-    Basis::template eval_basis_grad_gpu<num_quadrature_pts, dof_per_element>(
-        tid, pts + pts_offset, Nxis);
+    for (int q = 0; q < num_quadrature_pts; q++) {
+      Basis::template eval_basis_grad_gpu_new<num_quadrature_pts,
+                                              dof_per_element>(tid, q, pts,
+                                                               Nxis);
+    }
     __syncthreads();
 
     // Evaluate the derivative of the spatial dof in the computational
     // coordinates
     Basis::template eval_grad_gpu<num_quadrature_pts, spatial_dim>(
-        tid, pts + pts_offset, element_xloc, J + J_offset, Nxis[k]);
+        tid, pts + pts_offset, element_xloc, J, Nxis[k]);
     __syncthreads();
 
     if (tid < num_quadrature_pts * spatial_dim) {

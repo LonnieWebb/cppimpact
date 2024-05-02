@@ -71,7 +71,10 @@ int main(int argc, char *argv[]) {
   double dt = 0.00001;
   double time_end = smoke_test ? dt * 100 : 0.168;
 
-  int export_interval = 50;
+  int export_interval = INT_MAX;
+#ifdef CPPIMPACT_DEBUG_MODE
+  export_interval = 50;
+#endif
 
   Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);

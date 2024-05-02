@@ -11,6 +11,7 @@
 #include "cppimpact_utils.h"
 #include "dynamics_kernels.cuh"
 #include "mesh.h"
+#include "tetrahedral.h"
 #include "wall.h"
 
 template <typename T, class Basis, class Analysis, class Quadrature>
@@ -337,6 +338,24 @@ class Dynamics {
 #ifdef CPPIMPACT_DEBUG_MODE
     cuda_show_kernel_error();
 #endif
+    // return;
+
+    // {
+    //   cudaMemcpyAsync(vel_i, d_vel, ndof * sizeof(T), cudaMemcpyDeviceToHost,
+    //                   streams[0]);
+    //   cudaMemcpyAsync(global_acc, d_global_acc, ndof * sizeof(T),
+    //                   cudaMemcpyDeviceToHost, streams[1]);
+    //   cudaMemcpyAsync(global_mass, d_global_mass, ndof * sizeof(T),
+    //                   cudaMemcpyDeviceToHost, streams[2]);
+    //   cudaMemcpyAsync(global_xloc, d_global_xloc, ndof * sizeof(T),
+    //                   cudaMemcpyDeviceToHost, streams[3]);
+
+    //   cudaStreamSynchronize(streams[0]);
+    //   cudaStreamSynchronize(streams[1]);
+    //   cudaStreamSynchronize(streams[2]);
+    //   cudaStreamSynchronize(streams[3]);
+    //   export_to_vtk(timestep, vel_i, global_acc, global_mass, global_xloc);
+    // };
 
     while (time <= time_end) {
       cudaMemsetAsync(d_global_acc, T(0.0), sizeof(T) * ndof, streams[0]);
