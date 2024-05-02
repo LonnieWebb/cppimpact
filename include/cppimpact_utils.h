@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <string>
 
 // Utility function: write an array to a file
@@ -21,3 +22,22 @@ void array_to_txt(std::string txt_path, const T* array, int size) {
   }
   std::fclose(fp);
 }
+
+// A simple command-line argument parser
+class ArgParser {
+ public:
+  ArgParser(int argc, char* argv[]) {
+    for (int i = 0; i < argc - 1; i++) {
+      std::string entry(argv[i + 1]);
+      auto e = entry.find('=');
+      std::string key, val;
+      if (e != std::string::npos) {
+        key = entry.substr(0, e);
+        val = entry.substr(e + 1, entry.size() - e - 1);
+      }
+    }
+  }
+
+ private:
+  std::map<std::string, std::string> keyvals;
+};
