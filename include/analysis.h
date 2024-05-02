@@ -193,8 +193,7 @@ class FEAnalysis {
   }
 #endif
 
-#ifdef CPPIMPACT_CUDA_BACKEND
-  static __device__ void element_mass_matrix(
+  static __device__ void element_mass_matrix_gpu(
       int tid, const T element_density, const T *element_xloc,
       const T *element_dof, T *element_mass_matrix_diagonals,
       const int nodes_per_elem_num_quad) {
@@ -245,7 +244,6 @@ class FEAnalysis {
       element_mass_matrix_diagonals[3 * i + k] = m_i[i];
     __syncthreads();
   }
-#endif
 
   static void element_mass_matrix(const T element_density,
                                   const T *element_xloc, const T *element_dof,
@@ -275,21 +273,19 @@ class FEAnalysis {
     }
   }
 
-#ifdef CPPIMPACT_CUDA_BACKEND
-  static __device__ void calculate_f_internal(
+  static __device__ void calculate_f_internal_gpu(
       int tid, const T *element_xloc, const T *element_dof, T *f_internal,
       BaseMaterial<T, dof_per_node> *material) {
     // int i = tid / num_quadrature_pts;  // node index
     int k = tid % num_quadrature_pts;  // quadrature index
 
-    T pt[spatial_dim];
     T sigma[6];
     int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
     // contiguous for each quadrature points
     __shared__ T pts[num_quadrature_pts * spatial_dim];
     __shared__ T dets[num_quadrature_pts];
-    __shared__ T wdetJs[num_quadrature_pts];
+    __shared__ T wts[num_quadrature_pts];
     __shared__ T BTS[num_quadrature_pts * dof_per_element];
     __shared__ T J[num_quadrature_pts * spatial_dim * spatial_dim];
     __shared__ T Jinv[num_quadrature_pts * spatial_dim * spatial_dim];
@@ -299,8 +295,7 @@ class FEAnalysis {
     int J_offset = k * spatial_dim_2;
 
     if (tid < num_quadrature_pts) {  // tid = quad point index
-      wdetJs[tid] =
-          Quadrature::template get_quadrature_pt<T>(k, pts + pts_offset);
+      wts[tid] = Quadrature::template get_quadrature_pt<T>(k, pts + pts_offset);
     }
     __syncthreads();
 
@@ -313,9 +308,11 @@ class FEAnalysis {
     if (tid < num_quadrature_pts * spatial_dim) {
       int k = tid / spatial_dim;  // quad index
       int i = tid % spatial_dim;  // 0 ~ 2
+      if (i == 0) {
+        dets[k] = 0.0;
+      }
       det3x3_gpu(i, J + J_offset, dets[k]);
     }
-
     __syncthreads();
 
     if (tid < num_quadrature_pts * spatial_dim_2) {
@@ -323,9 +320,6 @@ class FEAnalysis {
       int k = tid / spatial_dim_2;  // quad index
       int i = tid % spatial_dim_2;  // 0 ~ 8
       inv3x3_gpu(i, J + J_offset, Jinv + J_offset, dets[k]);
-      if (i == 0) {
-        wdetJs[k] *= dets[k];
-      }
     }
     __syncthreads();
 
@@ -375,11 +369,10 @@ class FEAnalysis {
       int offset = k * dof_per_element;
       for (int d = 0; d < spatial_dim; d++) {
         atomicAdd(&f_internal[spatial_dim * i + d],
-                  wdetJs[k] * BTS[offset + spatial_dim * i + d]);
+                  wts[k] * dets[k] * BTS[offset + spatial_dim * i + d]);
       }
     }
   }
-#endif
 
   static void calculate_f_internal(const T *element_xloc, const T *element_dof,
                                    T *f_internal,

@@ -64,9 +64,9 @@ __global__ void update(int num_elements, T dt,
 
   __syncthreads();
   // Calculate element mass matrix
-  Analysis::element_mass_matrix(tid, d_material->rho, element_xloc, element_dof,
-                                element_mass_matrix_diagonals,
-                                nodes_per_elem_num_quad);
+  Analysis::element_mass_matrix_gpu(tid, d_material->rho, element_xloc,
+                                    element_dof, element_mass_matrix_diagonals,
+                                    nodes_per_elem_num_quad);
 
   int j = tid / 3;  // 0 ~ nodes_per_element - 1
   int k = tid % 3;  // 0, 1, 2
@@ -95,8 +95,8 @@ __global__ void update(int num_elements, T dt,
     Mr_inv = 1.0 / element_mass_matrix_diagonals[tid];
   }
 
-  // Analysis::calculate_f_internal(tid, element_xloc, element_dof,
-  //                                element_internal_forces, d_material);
+  Analysis::calculate_f_internal_gpu(tid, element_xloc, element_dof,
+                                     element_internal_forces, d_material);
   __syncthreads();
 
   // Calculate element acceleration

@@ -4,6 +4,7 @@
 #include "cppimpact_defs.h"
 
 // we need 3 threads
+// caution: det assumed be zero-initialized
 template <typename T>
 __device__ inline void det3x3_gpu(int tid, const T A[], T& det) {
   constexpr int det_indices[3][4] = {{0, 4, 3, 1}, {0, 5, 3, 2}, {1, 5, 2, 4}};
