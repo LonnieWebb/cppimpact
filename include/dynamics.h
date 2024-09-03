@@ -218,11 +218,12 @@ class Dynamics {
     for (int i = 0; i < ndof; i++) {
       vel_i[i] = 0.0;
     }
-
+    double time = 0.0;
     // Initialize states
     update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
         mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
-        element_nodes, vel, global_xloc, global_dof, global_acc, global_mass);
+        element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
+        time);
 
     // b.Stagger V0 .5 = V0 + dt / 2 * a0
     // Update velocity
@@ -234,7 +235,7 @@ class Dynamics {
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
-    double time = 0.0;
+
     int timestep = 0;
 
     while (time <= time_end) {
@@ -249,7 +250,8 @@ class Dynamics {
 
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
           mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
-          element_nodes, vel, global_xloc, global_dof, global_acc, global_mass);
+          element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
+          time);
 
       // Compute total mass (useful?)
       T total_mass = 0.0;

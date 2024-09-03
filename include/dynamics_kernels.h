@@ -10,12 +10,12 @@ template <typename T, int spatial_dim, int nodes_per_element, class Basis,
 void update(int num_nodes, int num_elements, int ndof, T dt,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
             const int *element_nodes, const T *vel, const T *global_xloc,
-            const T *global_dof, T *global_acc, T *global_mass) {
+            const T *global_dof, T *global_acc, T *global_mass, T time) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
   // Zero-out states
   memset(global_acc, 0, sizeof(T) * ndof);
-  memset(global_mass, 0, sizeof(T) * ndof);
+  // memset(global_mass, 0, sizeof(T) * ndof);
 
   // Allocate element quantities
   std::vector<T> element_mass_matrix_diagonals(dof_per_element);
@@ -27,40 +27,42 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
 
   // 2. Compute A1 = (Fext - Fint(U1)/M
 
-  // Update global mass
-  for (int i = 0; i < num_elements; i++) {
-    // Per element variables
-    for (int k = 0; k < dof_per_element; k++) {
-      element_mass_matrix_diagonals[k] = 0.0;
-      element_xloc[k] = 0.0;
-      element_dof[k] = 0.0;
-    }
+  if (global_mass[0] == 0.0) {
+    // Update global mass
+    for (int i = 0; i < num_elements; i++) {
+      // Per element variables
+      for (int k = 0; k < dof_per_element; k++) {
+        element_mass_matrix_diagonals[k] = 0.0;
+        element_xloc[k] = 0.0;
+        element_dof[k] = 0.0;
+      }
 
-    // Get the nodes of this element
-    for (int j = 0; j < nodes_per_element; j++) {
-      this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
-    }
+      // Get the nodes of this element
+      for (int j = 0; j < nodes_per_element; j++) {
+        this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
+      }
 
-    // Get the element locations
-    Analysis::template get_element_dof<spatial_dim>(
-        this_element_nodes.data(), global_xloc, element_xloc.data());
+      // Get the element locations
+      Analysis::template get_element_dof<spatial_dim>(
+          this_element_nodes.data(), global_xloc, element_xloc.data());
 
-    // Get the element degrees of freedom
-    Analysis::template get_element_dof<spatial_dim>(
-        this_element_nodes.data(), global_dof, element_dof.data());
+      // Get the element degrees of freedom
+      Analysis::template get_element_dof<spatial_dim>(
+          this_element_nodes.data(), global_dof, element_dof.data());
 
-    // Calculate the element mass matrix
-    Analysis::element_mass_matrix(material->rho, element_xloc.data(),
-                                  element_dof.data(),
-                                  element_mass_matrix_diagonals.data());
+      // Calculate the element mass matrix
+      Analysis::element_mass_matrix(material->rho, element_xloc.data(),
+                                    element_dof.data(),
+                                    element_mass_matrix_diagonals.data());
 
-    // assemble global acceleration
-    for (int j = 0; j < nodes_per_element; j++) {
-      int node = this_element_nodes[j];
+      // assemble global acceleration
+      for (int j = 0; j < nodes_per_element; j++) {
+        int node = this_element_nodes[j];
 
-      global_mass[3 * node] += element_mass_matrix_diagonals[3 * j];
-      global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
-      global_mass[3 * node + 2] += element_mass_matrix_diagonals[3 * j + 2];
+        global_mass[3 * node] += element_mass_matrix_diagonals[3 * j];
+        global_mass[3 * node + 1] += element_mass_matrix_diagonals[3 * j + 1];
+        global_mass[3 * node + 2] += element_mass_matrix_diagonals[3 * j + 2];
+      }
     }
   }
 

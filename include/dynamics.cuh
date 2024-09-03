@@ -288,12 +288,12 @@ class Dynamics {
     T *vel_i = new T[ndof];
     T *global_mass = new T[ndof];
     T *global_acc = new T[ndof];
-
+    T time = 0.0;
     update<T, spatial_dim, nodes_per_element>
         <<<mesh->num_elements, threads_per_block>>>(
             mesh->num_elements, dt, d_material, d_wall, d_element_nodes, d_vel,
             d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
-            nodes_per_elem_num_quad);
+            nodes_per_elem_num_quad, time);
 
     // Do we need this?
     cudaDeviceSynchronize();
@@ -323,7 +323,6 @@ class Dynamics {
     array_to_txt<T>("gpu_vel.txt", vel, ndof);
     array_to_txt<T>("gpu_xloc.txt", global_xloc, ndof);
 
-    T time = 0.0;
     int timestep = 0;
     // Time Loop
 
@@ -360,7 +359,7 @@ class Dynamics {
     while (time <= time_end) {
       cudaMemsetAsync(d_global_acc, T(0.0), sizeof(T) * ndof, streams[0]);
       cudaMemsetAsync(d_global_dof, T(0.0), sizeof(T) * ndof, streams[1]);
-      cudaMemsetAsync(d_global_mass, T(0.0), sizeof(T) * ndof, streams[2]);
+      // cudaMemsetAsync(d_global_mass, T(0.0), sizeof(T) * ndof, streams[2]);
       cudaStreamSynchronize(streams[0]);
       cudaStreamSynchronize(streams[1]);
       cudaStreamSynchronize(streams[2]);
@@ -374,7 +373,7 @@ class Dynamics {
           <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
               mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
               d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
-              nodes_per_elem_num_quad);
+              nodes_per_elem_num_quad, time);
       cudaStreamSynchronize(streams[0]);
 
       external_forces<T><<<node_blocks, 32, 0, streams[0]>>>(

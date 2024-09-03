@@ -14,7 +14,7 @@ __global__ void update(int num_elements, T dt,
                        const int *d_element_nodes, const T *d_vel,
                        const T *d_global_xloc, const T *d_global_dof,
                        T *d_global_acc, T *d_global_mass,
-                       const int nodes_per_elem_num_quad) {
+                       const int nodes_per_elem_num_quad, T time) {
   using Basis = TetrahedralBasis<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
@@ -74,11 +74,11 @@ __global__ void update(int num_elements, T dt,
   if (tid < dof_per_element) {
     node = this_element_nodes[j];
   }
-
-  // assemble global mass matrix
-  if (tid < dof_per_element) {
-    atomicAdd(&d_global_mass[3 * node + k],
-              element_mass_matrix_diagonals[3 * j + k]);
+  if (time == 0.0) {
+    if (tid < dof_per_element) {
+      atomicAdd(&d_global_mass[3 * node + k],
+                element_mass_matrix_diagonals[3 * j + k]);
+    }
   }
   __syncthreads();
 
