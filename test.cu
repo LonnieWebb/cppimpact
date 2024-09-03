@@ -44,17 +44,17 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/Dynamics Cube Coarse.inp");
+  std::string filename("../input/Dynamics Cube.inp");
   Mesh<T> tensile;
 
   // Material Properties
-  T E = 200E6;  // Pa
-  T rho = 780;  // kg/m3
-  T nu = 0.25;
+  T E = 68.9E9;  // Pa
+  T rho = 2700;  // kg/m3
+  T nu = 0.33;
   T beta = 0.0;
   T H = 10;
   T Y0 = 1.9 * std::sqrt(3.0);
-  std::string name = "Steel";
+  std::string name = "AL6061";
 
   Elastoplastic<T, dof_per_node> material(E, rho, nu, beta, H, Y0, name);
   tensile.load_mesh(filename);
@@ -62,13 +62,13 @@ int main(int argc, char *argv[]) {
   // Set the number of degrees of freedom
 
   // Position and velocity in x, y, z
-  T init_position[] = {0.1, 0.1, 0.2};
+  T init_position[] = {0, 0, 0.001};
   T init_velocity[] = {0, 0.0, -0.5};
 
   const int normal = 1;
   std::string wall_name = "Wall";
-  T location = 0.0999;
-  double dt = 0.00001;
+  T location = 0;
+  double dt = 1e-6;
   double time_end = smoke_test ? dt * 100 : 0.268;
 
   int export_interval = INT_MAX;
