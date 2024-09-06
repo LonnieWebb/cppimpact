@@ -15,8 +15,6 @@
 template <typename T, class Basis, class Analysis, class Quadrature>
 class Dynamics {
  public:
-  Mesh<T> *mesh;
-
   int *reduced_nodes;
   int reduced_dofs_size;
   int ndof;
@@ -24,12 +22,15 @@ class Dynamics {
   static constexpr int spatial_dim = Basis::spatial_dim;
   static constexpr int dof_per_node = spatial_dim;
   static constexpr int num_quadrature_pts = Quadrature::num_quadrature_pts;
+
+  Mesh<T, nodes_per_element> *mesh;
   BaseMaterial<T, dof_per_node> *material;
   Wall<T, 2, Basis> *wall;
   T *global_xloc;
   T *vel;
 
-  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material,
+  Dynamics(Mesh<T, nodes_per_element> *input_mesh,
+           BaseMaterial<T, dof_per_node> *input_material,
            Wall<T, 2, Basis> *input_wall = nullptr)
       : mesh(input_mesh),
         material(input_material),

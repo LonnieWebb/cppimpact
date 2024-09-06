@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-template <typename T>
+template <typename T, int nodes_per_element>
 class Mesh {
  public:
   int num_elements, num_nodes, num_node_sets, num_fixed_nodes, num_slave_nodes;
@@ -192,11 +192,11 @@ class Mesh {
 
     // Convert elements and nodeSets to flat structures
     num_elements = elements.size();
-    int *elem_nodes = new int[10 * num_elements];
+    int *elem_nodes = new int[nodes_per_element * num_elements];
 
     for (const auto &elem : elements) {
-      for (int j = 0; j < 10; j++) {
-        elem_nodes[10 * (elem.second.index - 1) + j] =
+      for (int j = 0; j < nodes_per_element; j++) {
+        elem_nodes[nodes_per_element * (elem.second.index - 1) + j] =
             elem.second.nodeIndices[j] - 1;
       }
     }
@@ -255,7 +255,17 @@ class Mesh {
     // Update fixed boundary conditions
     collect_fixed_nodes();
     collect_slave_nodes();
-    // Print all values in element_nodes
+    // Print values in element_nodes
+    // for (int i = 0; i < 30; i++) {
+    //   std::cout << element_nodes[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // // Print the first 30 values of slave nodes
+    // for (int i = 0; i < 30 && i < num_slave_nodes; i++) {
+    //   std::cout << slave_nodes[i] << " ";
+    // }
+    // std::cout << std::endl;
   }
 
  private:

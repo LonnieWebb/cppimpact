@@ -39,7 +39,7 @@ class TetrahedralQuadrature {
 };
 
 template <typename T>
-class TetrahedralBasis {
+class TetrahedralBasisQuadratic {
  public:
   static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = 10;
@@ -49,20 +49,22 @@ class TetrahedralBasis {
   static __device__ void eval_basis_grad_gpu_new(
       int tid, int q, const T pts[],
       T Nxis[num_quadrature_pts][dof_per_element]) {
-
-  constexpr  T coeffs[30][4] = {
-      {4.0, 4.0, 4.0, -3.0},   {4.0, 4.0, 4.0, -3.0},   {4.0, 4.0, 4.0,
-      -3.0}, {4.0, 0.0, 0.0, -1.0},   {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0,
-      0.0, 0.0}, {0.0, 0.0, 0.0, 0.0},    {0.0, 4.0, 0.0, -1.0},   {0.0, 0.0,
-      0.0, 0.0}, {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0, 0.0},    {0.0,
-      0.0, 4.0, -1.0},
-      {-8.0, -4.0, -4.0, 4.0}, {-4.0, 0.0, 0.0, 0.0},   {-4.0, 0.0, 0.0,
-      0.0}, {0.0, 4.0, 0.0, 0.0},    {4.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0,
-      0.0}, {0.0, -4.0, 0.0, 0.0},   {-4.0, -8.0, -4.0, 4.0}, {0.0, -4.0,
-      0.0, 0.0}, {0.0, 0.0, -4.0, 0.0},   {0.0, 0.0, -4.0, 0.0},   {-4.0,
-      -4.0, -8.0, 4.0}, {0.0, 0.0, 4.0, 0.0},    {0.0, 0.0, 0.0, 0.0}, {4.0,
-      0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 4.0, 0.0},
-      {0.0, 4.0, 0.0, 0.0}};
+    constexpr T coeffs[30][4] = {
+        {4.0, 4.0, 4.0, -3.0},   {4.0, 4.0, 4.0, -3.0},
+        {4.0, 4.0, 4.0, -3.0},   {4.0, 0.0, 0.0, -1.0},
+        {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0},    {0.0, 4.0, 0.0, -1.0},
+        {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 4.0, -1.0},
+        {-8.0, -4.0, -4.0, 4.0}, {-4.0, 0.0, 0.0, 0.0},
+        {-4.0, 0.0, 0.0, 0.0},   {0.0, 4.0, 0.0, 0.0},
+        {4.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0, 0.0},
+        {0.0, -4.0, 0.0, 0.0},   {-4.0, -8.0, -4.0, 4.0},
+        {0.0, -4.0, 0.0, 0.0},   {0.0, 0.0, -4.0, 0.0},
+        {0.0, 0.0, -4.0, 0.0},   {-4.0, -4.0, -8.0, 4.0},
+        {0.0, 0.0, 4.0, 0.0},    {0.0, 0.0, 0.0, 0.0},
+        {4.0, 0.0, 0.0, 0.0},    {0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 4.0, 0.0},    {0.0, 4.0, 0.0, 0.0}};
 
     if (tid < 30) {
       const T* pt = pts + q * spatial_dim;
@@ -370,4 +372,26 @@ class TetrahedralBasis {
       D_matrix[i] *= scalar;
     }
   }
+};
+
+template <typename T>
+class TetrahedralBasisLinear {
+ public:
+  static constexpr int spatial_dim = 3;
+  static constexpr int nodes_per_element = 4;
+
+  static CPPIMPACT_FUNCTION void eval_basis_grad(const T pt[], T Nxi[]) {}
+
+  template <int dim>
+  static CPPIMPACT_FUNCTION void eval_grad(const T pt[], const T dof[],
+                                           T grad[]) {}
+
+  template <int dim>
+  static CPPIMPACT_FUNCTION void add_grad(const T pt[], const T coef[],
+                                          T res[]) {}
+
+  static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {}
+
+  static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T* pt,
+                                                    T B[]) {}
 };

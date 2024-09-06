@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
 #else
   using T = double;
 #endif
-  using Basis = TetrahedralBasis<T>;
+  using Basis = TetrahedralBasisLinear<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -44,8 +44,8 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/Dynamics Cube.inp");
-  Mesh<T> tensile;
+  std::string filename("../input/Dynamics Cube Linear.inp");
+  Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties
   T E = 68.9E9;  // Pa
@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
 
   // Solve loop with total timer
   auto start = std::chrono::high_resolution_clock::now();
-  dyna.solve(dt, time_end, export_interval);
+  // dyna.solve(dt, time_end, export_interval);
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;

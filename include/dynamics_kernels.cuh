@@ -10,12 +10,12 @@
 template <typename T, int spatial_dim, int nodes_per_element>
 __global__ void update(int num_elements, T dt,
                        BaseMaterial<T, spatial_dim> *d_material,
-                       Wall<T, 2, TetrahedralBasis<T>> *d_wall,
+                       Wall<T, 2, TetrahedralBasisQuadratic<T>> *d_wall,
                        const int *d_element_nodes, const T *d_vel,
                        const T *d_global_xloc, const T *d_global_dof,
                        T *d_global_acc, T *d_global_mass,
                        const int nodes_per_elem_num_quad, T time) {
-  using Basis = TetrahedralBasis<T>;
+  using Basis = TetrahedralBasisQuadratic<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -117,10 +117,10 @@ __global__ void update(int num_elements, T dt,
 
 // update d_global_acc
 template <typename T>
-__global__ void external_forces(int num_nodes,
-                                Wall<T, 2, TetrahedralBasis<T>> *d_wall,
-                                const T *d_global_xloc, const T *d_global_dof,
-                                const T *d_global_mass, T *d_global_acc) {
+__global__ void external_forces(
+    int num_nodes, Wall<T, 2, TetrahedralBasisQuadratic<T>> *d_wall,
+    const T *d_global_xloc, const T *d_global_dof, const T *d_global_mass,
+    T *d_global_acc) {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
   int node_idx = blockDim.x * bid + tid;

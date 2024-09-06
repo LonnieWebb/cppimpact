@@ -12,7 +12,7 @@
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis;
 using T = double;
-using Basis = TetrahedralBasis<T>;
+using Basis = TetrahedralBasisQuadratic<T>;
 using Quadrature = TetrahedralQuadrature;
 using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -463,7 +463,7 @@ class FEAnalysis {
 // explicit instantiation if needed
 
 // using T = double;
-// using Basis = TetrahedralBasis;
+// using Basis = TetrahedralBasisQuadratic;
 // using Quadrature = TetrahedralQuadrature;
 // using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
