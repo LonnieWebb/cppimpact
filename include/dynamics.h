@@ -82,7 +82,7 @@ class Dynamics {
     vtkFile << "FEA simulation data\n";
     vtkFile << "ASCII\n";
     vtkFile << "DATASET UNSTRUCTURED_GRID\n";
-    const double threshold = 1e6;
+    const double threshold = 1e15;
 
     vtkFile << "POINTS " << mesh->num_nodes << " float\n";
     for (int i = 0; i < mesh->num_nodes; ++i) {

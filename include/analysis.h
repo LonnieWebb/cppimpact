@@ -12,7 +12,7 @@
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis;
 using T = double;
-using Basis = TetrahedralBasisQuadratic<T>;
+using Basis = TetrahedralBasisLinear<T>;
 using Quadrature = TetrahedralQuadrature;
 using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -396,11 +396,40 @@ class FEAnalysis {
     }
   }
 
+  static void calculate_B_T_D_B(const T *B_matrix, const T *D_matrix,
+                                T *B_T_D_B) {
+    // B_matrix: 6 x N matrix
+    // D_matrix: 6 x 6 matrix
+    // B_T_D_B: N x N matrix (initialized to zero before calling)
+    // N: spatial_dim * nodes_per_element
+
+    const int N = nodes_per_element * spatial_dim;
+
+    for (int k = 0; k < 6; ++k) {
+      for (int l = 0; l < 6; ++l) {
+        T Dkl = D_matrix[k * 6 + l];
+        const T *B_row_k = &B_matrix[k * N];
+        const T *B_row_l = &B_matrix[l * N];
+
+        for (int i = 0; i < N; ++i) {
+          T Bik_Dkl = B_row_k[i] * Dkl;
+          T *B_T_D_B_row = &B_T_D_B[i * N];
+
+          for (int j = 0; j < N; ++j) {
+            B_T_D_B_row[j] += Bik_Dkl * B_row_l[j];
+          }
+        }
+      }
+    }
+  }
+
   static void calculate_f_internal(const T *element_xloc, const T *element_dof,
                                    T *f_internal,
                                    BaseMaterial<T, dof_per_node> *material) {
     T pt[spatial_dim];
     T sigma[6];
+    T K_e[dof_per_element * dof_per_element];
+    memset(K_e, 0, sizeof(T) * dof_per_element * dof_per_element);
     for (int i = 0; i < num_quadrature_pts; i++) {
       T weight = Quadrature::template get_quadrature_pt<T>(i, pt);
       // Evaluate the derivative of the spatial dof in the computational
@@ -411,7 +440,6 @@ class FEAnalysis {
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
-
       T B_matrix[6 * spatial_dim * nodes_per_element];
       memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
 
@@ -421,42 +449,64 @@ class FEAnalysis {
       memset(D_matrix, 0, 6 * 6 * sizeof(T));
       Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix);
 
-      T intermediate_1[6];
-      memset(intermediate_1, 0, 6 * sizeof(T));
+      T B_T_D_B[dof_per_element * dof_per_element];
+      memset(B_T_D_B, 0, sizeof(T) * dof_per_element * dof_per_element);
 
-      // multiply B*u
-      cppimpact_gemv<T, MatOp::NoTrans>(6, 30, 1.0, B_matrix, element_dof, 0.0,
-                                        intermediate_1);
-      // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 30, 1.0, B_matrix, 30,
-      //             element_dof, 1, 0.0, intermediate_1, 1);
+      calculate_B_T_D_B(B_matrix, D_matrix, B_T_D_B);
 
-      memset(sigma, 0, 6 * sizeof(T));
-      // multiply D*intermediate_1
-      cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix, intermediate_1,
-                                        0.0, sigma);
-      // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 6, 1.0, D_matrix, 6,
-      //             intermediate_1, 1, 0.0, sigma, 1);
+      // for (int p = 0; p < dof_per_element * dof_per_element; p++) {
+      //   printf("B_T_D_B[%d] = %f\n", p, B_T_D_B[p]);
+      // }
 
-      // T stress_vector[6];
-      // stress_vector[0] = sigma[0]; // sigma_xx
-      // stress_vector[1] = sigma[4]; // sigma_yy
-      // stress_vector[2] = sigma[8]; // sigma_zz
-      // stress_vector[3] = sigma[1]; // sigma_xy
-      // stress_vector[4] = sigma[5]; // sigma_yz
-      // stress_vector[5] = sigma[2]; // sigma_xz
-
-      T BTS[spatial_dim * nodes_per_element];
-      memset(BTS, 0, sizeof(T) * spatial_dim * nodes_per_element);
-
-      // multiply B^T by S
-      cppimpact_gemv<T, MatOp::Trans>(6, 30, 1.0, B_matrix, sigma, 0.0, BTS);
-      // cblas_dgemv(CblasRowMajor, CblasTrans, 6, 30, 1.0, B_matrix, 30, sigma,
-      //             1, 0.0, BTS, 1);
-
-      for (int j = 0; j < spatial_dim * nodes_per_element; j++) {
-        f_internal[j] += weight * detJ * BTS[j];
+      for (int j = 0; j < dof_per_element * dof_per_element; j++) {
+        K_e[j] += weight * detJ * B_T_D_B[j];
       }
     }
+
+    cppimpact_gemv<T, MatOp::NoTrans>(dof_per_element, dof_per_element, 1.0,
+                                      K_e, element_dof, 0.0, f_internal);
+
+    // T intermediate_1[6];
+    // memset(intermediate_1, 0, 6 * sizeof(T));
+
+    // // multiply B*u
+    // cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0,
+    // B_matrix,
+    //                                   element_dof, 0.0,
+    //                                   intermediate_1);
+    // // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 30, 1.0, B_matrix,
+    // 30,
+    // //             element_dof, 1, 0.0, intermediate_1, 1);
+
+    // // multiply D*intermediate_1
+    // cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix,
+    // intermediate_1,
+    //                                   0.0, sigma);
+    // // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 6, 1.0, D_matrix, 6,
+    // //             intermediate_1, 1, 0.0, sigma, 1);
+
+    // // T stress_vector[6];
+    // // stress_vector[0] = sigma[0]; // sigma_xx
+    // // stress_vector[1] = sigma[4]; // sigma_yy
+    // // stress_vector[2] = sigma[8]; // sigma_zz
+    // // stress_vector[3] = sigma[1]; // sigma_xy
+    // // stress_vector[4] = sigma[5]; // sigma_yz
+    // // stress_vector[5] = sigma[2]; // sigma_xz
+
+    // T BTS[spatial_dim * nodes_per_element];
+    // memset(BTS, 0, sizeof(T) * spatial_dim * nodes_per_element);
+
+    // // multiply B^T by S
+    // cppimpact_gemv<T, MatOp::Trans>(6, dof_per_element, 1.0, B_matrix,
+    // sigma,
+    //                                 0.0, BTS);
+    // // cblas_dgemv(CblasRowMajor, CblasTrans, 6, 30, 1.0, B_matrix, 30,
+    // sigma,
+    // //             1, 0.0, BTS, 1);
+
+    // for (int j = 0; j < spatial_dim * nodes_per_element; j++) {
+    //   f_internal[j] += weight * detJ * BTS[j];
+    // }
   }
 };
 

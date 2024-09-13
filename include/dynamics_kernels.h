@@ -55,7 +55,7 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
                                     element_dof.data(),
                                     element_mass_matrix_diagonals.data());
 
-      // assemble global acceleration
+      // assemble global mass
       for (int j = 0; j < nodes_per_element; j++) {
         int node = this_element_nodes[j];
 
@@ -98,13 +98,13 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
       Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
     }
 
+    // DEBUGGING: Error in here somewhere, most likely
     Analysis::calculate_f_internal(element_xloc.data(), element_dof.data(),
                                    element_internal_forces.data(), material);
 
     for (int j = 0; j < dof_per_element; j++) {
       element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
     }
-
     // assemble global acceleration
     for (int j = 0; j < nodes_per_element; j++) {
       int node = this_element_nodes[j];
