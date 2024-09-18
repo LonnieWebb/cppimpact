@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/Dynamics Cube Linear.inp");
+  std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
   Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties
@@ -73,21 +73,21 @@ int main(int argc, char *argv[]) {
   // Set the number of degrees of freedom
 
   // Position and velocity in x, y, z
-  T init_position[] = {0, 0, 0.001};
-  T init_velocity[] = {0, 0.0, -100};
+  T init_position[] = {0, 0, 0};
+  T init_velocity[] = {0, 0.0, -1};
 
   const int normal = 1;
   std::string wall_name = "Wall";
-  T location = 0.00095;
-  double dt = 1e-7;
-  double time_end = smoke_test ? dt * 100 : 0.268;
+  T location = -1.501E-1 - 0.00005;
+  double dt = 1e-6;
+  double time_end = smoke_test ? dt * 100 : 0.5;
 
   int export_interval = INT_MAX;
 #ifdef CPPIMPACT_DEBUG_MODE
   export_interval = 10;
 #endif
 
-  Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
+  Wall<T, 2, Basis> w(wall_name, location, E * 10, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);
 
   Dynamics<T, Basis, Analysis, Quadrature> dyna(&tensile, &material, &w);

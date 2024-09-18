@@ -1,8 +1,3 @@
-# Set the default build type to Debug if it's not specified
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
-
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
 project(NEOHOOKEAN_CUDA LANGUAGES CXX CUDA)
@@ -25,6 +20,10 @@ endif()
 # C++ target
 add_executable(cpu_test test.cu)
 target_link_libraries(cpu_test ${LAPACK_LIBRARIES})
+
+# Add FEA_debug target
+add_executable(FEA_debug FEA_debug.cu)
+target_link_libraries(FEA_debug ${LAPACK_LIBRARIES})
 
 # GPU target
 add_executable(gpu_test test.cu)
