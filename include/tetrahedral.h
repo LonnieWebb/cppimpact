@@ -455,10 +455,11 @@ class TetrahedralBasisLinear {
                             // for this node
 
       // Transform gradients from element to global coordinates using Jinv
-      // TODO: double check
+      // TODO: check if Jinv should be transposed
       for (int i = 0; i < spatial_dim; ++i) {
         dNdx[i] = 0.0;
         for (int j = 0; j < spatial_dim; ++j) {
+          // i and j transposed
           dNdx[i] += Jinv[i * spatial_dim + j] * Nxi[node * spatial_dim + j];
         }
       }

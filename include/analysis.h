@@ -406,9 +406,9 @@ class FEAnalysis {
     const int N = nodes_per_element * spatial_dim;
 
     for (int k = 0; k < 6; ++k) {
+      const T *B_row_k = &B_matrix[k * N];
       for (int l = 0; l < 6; ++l) {
         T Dkl = D_matrix[k * 6 + l];
-        const T *B_row_k = &B_matrix[k * N];
         const T *B_row_l = &B_matrix[l * N];
 
         for (int i = 0; i < N; ++i) {

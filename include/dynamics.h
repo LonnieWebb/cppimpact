@@ -12,6 +12,7 @@
 #include "mesh.h"
 #include "wall.h"
 
+// TODO: Make wall optional
 template <typename T, class Basis, class Analysis, class Quadrature>
 class Dynamics {
  public:
@@ -174,6 +175,29 @@ class Dynamics {
 
     vtkFile.close();
     std::cout << "Exported " << filename << std::endl;
+  }
+
+  void debug_strain(const T strain, const int strain_dim, const T static_coord,
+                    const T tol) {
+    memcpy(global_xloc, mesh->xloc,
+           ndof * sizeof(T));  // mesh->xloc will store initial positions
+
+    for (int i = 0; i < mesh->num_nodes; i++) {
+      if (abs(global_xloc[i * 3 + strain_dim] - static_coord) > tol) {
+        global_xloc[i * 3 + strain_dim] +=
+            (1 + strain) * global_xloc[i * 3 + strain_dim];
+      }
+    }
+
+    T *vel = new T[ndof];
+    T *global_acc = new T[ndof];
+    T *global_mass = new T[ndof];
+
+    memset(vel, 0, sizeof(T) * ndof);
+    memset(global_acc, 0, sizeof(T) * ndof);
+    memset(global_mass, 0, sizeof(T) * ndof);
+
+    export_to_vtk(0, vel, global_acc, global_mass);
   }
 
   void solve(double dt, double time_end, int export_interval) {

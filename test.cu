@@ -34,7 +34,12 @@ int main(int argc, char *argv[]) {
 #else
   using T = double;
 #endif
+#ifdef CPPIMPACT_CUDA_BACKEND
+  using Basis = TetrahedralBasisQuadratic<T>;
+#else
   using Basis = TetrahedralBasisLinear<T>;
+
+#endif
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;

@@ -23,7 +23,7 @@ target_link_libraries(cpu_test ${LAPACK_LIBRARIES})
 
 # Add FEA_debug target
 add_executable(FEA_debug FEA_debug.cu)
-target_link_libraries(FEA_debug ${LAPACK_LIBRARIES})
+# target_link_libraries(FEA_debug ${LAPACK_LIBRARIES})
 
 # GPU target
 add_executable(gpu_test test.cu)
