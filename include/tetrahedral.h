@@ -402,22 +402,24 @@ class TetrahedralBasisLinear {
   }
 
   template <int dim>
-  static CPPIMPACT_FUNCTION void eval_grad(const T pt[], const T dof[],
+  static CPPIMPACT_FUNCTION void eval_grad(const T pt[], const T xloc[],
                                            T grad[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
-    for (int k = 0; k < spatial_dim * dim; k++) {
-      grad[k] = 0.0;
+    for (int i = 0; i < nodes_per_element; i++) {
+      printf("xloc[%d]: %f, %f, %f\n", i, xloc[dim * i], xloc[dim * i + 1],
+             xloc[dim * i + 2]);
     }
 
-    for (int k = 0; k < dim; k++) {
-      for (int i = 0; i < nodes_per_element; i++) {
-        grad[spatial_dim * k] += Nxi[spatial_dim * i] * dof[dim * i + k];
-        grad[spatial_dim * k + 1] +=
-            Nxi[spatial_dim * i + 1] * dof[dim * i + k];
-        grad[spatial_dim * k + 2] +=
-            Nxi[spatial_dim * i + 2] * dof[dim * i + k];
+    // Initialize grad (Jacobian matrix) to zero
+    memset(grad, 0, spatial_dim * dim * sizeof(T));
+
+    for (int p = 0; p < dim; p++) {
+      for (int q = 0; q < dim; q++) {
+        for (int i = 0; i < nodes_per_element; i++) {
+          grad[p * dim + q] += Nxi[spatial_dim * i + q] * xloc[dim * i + p];
+        }
       }
     }
   }
@@ -439,16 +441,25 @@ class TetrahedralBasisLinear {
   }
 
   static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {
+    // N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
+    // N[1] = pt[0];                        // 3 from paper
+    // N[2] = pt[1];                        // 1 from paper
+    // N[3] = pt[2];                        // 4 from paper
+
     N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
     N[1] = pt[0];                        // 3 from paper
-    N[2] = pt[1];                        // 1 from paper
-    N[3] = pt[2];                        // 4 from paper
+    N[2] = pt[1];
+    N[3] = pt[2];  // 4 from paper
   }
 
   static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T* pt,
                                                     T B[]) {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
+
+    for (int i = 0; i < spatial_dim * nodes_per_element; ++i) {
+      printf("Nxi[%d]: %f\n", i, Nxi[i]);
+    }
 
     for (int node = 0; node < nodes_per_element; ++node) {
       T dNdx[spatial_dim];  // Placeholder for gradients in global coordinates
@@ -459,10 +470,10 @@ class TetrahedralBasisLinear {
       for (int i = 0; i < spatial_dim; ++i) {
         dNdx[i] = 0.0;
         for (int j = 0; j < spatial_dim; ++j) {
-          // i and j transposed
-          dNdx[i] += Jinv[i * spatial_dim + j] * Nxi[node * spatial_dim + j];
+          dNdx[i] += Jinv[j * spatial_dim + i] * Nxi[node * spatial_dim + j];
         }
       }
+      printf("dNdx[%d]: %f, %f, %f\n", node, dNdx[0], dNdx[1], dNdx[2]);
 
       // Index in the B matrix for the current node
       int idx = 3 * node;

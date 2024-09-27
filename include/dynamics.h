@@ -29,6 +29,7 @@ class Dynamics {
   Wall<T, 2, Basis> *wall;
   T *global_xloc;
   T *vel;
+  T *global_strains;
 
   Dynamics(Mesh<T, nodes_per_element> *input_mesh,
            BaseMaterial<T, dof_per_node> *input_material,
@@ -41,8 +42,8 @@ class Dynamics {
         vel(new T[mesh->num_nodes * dof_per_node]),
         global_xloc(
             new T[mesh->num_nodes *
-                  dof_per_node])  // Allocate memory for global_xloc here
-  {
+                  dof_per_node]),  // Allocate memory for global_xloc here
+        global_strains(new T[mesh->num_nodes * 6]) {
     ndof = mesh->num_nodes * dof_per_node;
   }
 
@@ -50,6 +51,7 @@ class Dynamics {
     delete[] reduced_nodes;
     delete[] vel;
     delete[] global_xloc;
+    delete[] global_strains;
   }
 
   // Initialize the body. Move the mesh origin to init_position and give all
@@ -148,6 +150,22 @@ class Dynamics {
       }
     }
 
+    // First part of the strain
+    vtkFile << "VECTORS strain1 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_strains[6 * i + 0] << " "    // First component (e_xx)
+              << global_strains[6 * i + 1] << " "    // Second component (e_yy)
+              << global_strains[6 * i + 2] << "\n";  // Third component (e_zz)
+    }
+
+    // Second part of the strain
+    vtkFile << "VECTORS strain2 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_strains[6 * i + 3] << " "    // Fourth component (e_xy)
+              << global_strains[6 * i + 4] << " "    // Fifth component (e_xz)
+              << global_strains[6 * i + 5] << "\n";  // Sixth component (e_yz)
+    }
+
     vtkFile << "VECTORS acceleration double\n";
     for (int i = 0; i < mesh->num_nodes; ++i) {
       for (int j = 0; j < 3; ++j) {
@@ -181,21 +199,101 @@ class Dynamics {
                     const T tol) {
     memcpy(global_xloc, mesh->xloc,
            ndof * sizeof(T));  // mesh->xloc will store initial positions
+    T *global_dof = new T[ndof];
+
+    memset(global_dof, 0, sizeof(T) * ndof);
 
     for (int i = 0; i < mesh->num_nodes; i++) {
-      if (abs(global_xloc[i * 3 + strain_dim] - static_coord) > tol) {
-        global_xloc[i * 3 + strain_dim] +=
-            (1 + strain) * global_xloc[i * 3 + strain_dim];
-      }
+      // if (abs(global_xloc[i * 3 + strain_dim] - static_coord) > tol) {
+      T x = global_xloc[i * 3 + 0];
+      T y = global_xloc[i * 3 + 1];
+      T z = global_xloc[i * 3 + 2];
+
+      global_dof[i * 3 + 0] = strain * x;  // Displacement in x
+      // global_dof[i * 3 + 1] = -material->nu * strain * y;  // Displacement in
+      // y global_dof[i * 3 + 2] = -material->nu * strain * z;  // Displacement
+      // in z } else {
+      //   T y = global_xloc[i * 3 + 1];
+      //   T z = global_xloc[i * 3 + 2];
+      //   global_dof[i * 3 + 0] = 0.0;
+      //   global_dof[i * 3 + 1] =
+      //       -material->nu * strain * y;  // Displacement in y
+      //   global_dof[i * 3 + 2] =
+      //       -material->nu * strain * z;  // Displacement in z
+      // }
     }
 
-    T *vel = new T[ndof];
     T *global_acc = new T[ndof];
     T *global_mass = new T[ndof];
 
     memset(vel, 0, sizeof(T) * ndof);
     memset(global_acc, 0, sizeof(T) * ndof);
     memset(global_mass, 0, sizeof(T) * ndof);
+    memset(global_strains, 0, sizeof(T) * 6 * mesh->num_nodes);
+
+    constexpr int dof_per_element = spatial_dim * nodes_per_element;
+    // Allocate element quantities
+    std::vector<T> element_xloc(dof_per_element);
+    std::vector<T> element_dof(dof_per_element);
+    std::vector<int> this_element_nodes(nodes_per_element);
+
+    T total_energy = 0.0;
+    T *node_coords = new T[spatial_dim];
+    T *element_strains = new T[6];
+
+    for (int i = 0; i < mesh->num_elements; i++) {
+      memset(node_coords, 0, sizeof(T) * spatial_dim);
+
+      for (int k = 0; k < dof_per_element; k++) {
+        element_xloc[k] = 0.0;
+        element_dof[k] = 0.0;
+      }
+
+      for (int j = 0; j < nodes_per_element; j++) {
+        this_element_nodes[j] = mesh->element_nodes[nodes_per_element * i + j];
+      }
+
+      // Get the element locations
+      Analysis::template get_element_dof<spatial_dim>(
+          this_element_nodes.data(), global_xloc, element_xloc.data());
+
+      // Get the element degrees of freedom
+      Analysis::template get_element_dof<spatial_dim>(
+          this_element_nodes.data(), global_dof, element_dof.data());
+
+      T element_W = Analysis::calculate_strain_energy(
+          element_xloc.data(), element_dof.data(), material);
+
+      for (int node = 0; node < nodes_per_element; node++) {
+        memset(element_strains, 0, sizeof(T) * 6);
+        for (int k = 0; k < spatial_dim; k++) {
+          node_coords[k] = element_xloc[node * spatial_dim + k];
+        }
+        Analysis::calculate_strain(element_xloc.data(), element_dof.data(),
+                                   node_coords, element_strains, material);
+        int node_idx = this_element_nodes[node];
+        for (int k = 0; k < 6; k++) {
+          global_strains[node_idx * 6 + k] = element_strains[k];
+          // #ifdef
+          // printf("Node %d, Strain %d: %f\n", node_idx, k,
+          // element_strains[k]); #endif
+        }
+      }
+
+      total_energy += element_W;
+    }
+
+    printf("Total Strain Energy = %f\n", total_energy);
+    for (int i = 0; i < ndof; i++) {
+      global_xloc[i] += global_dof[i];
+    }
+    for (int i = 0; i < mesh->num_nodes; i++) {
+      printf("Node %d strains: ", i);
+      for (int j = 0; j < 6; j++) {
+        printf("%f ", global_strains[6 * i + j]);
+      }
+      printf("\n");
+    }
 
     export_to_vtk(0, vel, global_acc, global_mass);
   }

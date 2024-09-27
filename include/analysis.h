@@ -440,6 +440,12 @@ class FEAnalysis {
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
+
+#ifdef CPPIMPACT_DEBUG_MODE
+      if (detJ < 0.0) {
+        printf("detJ negative\n");
+      }
+#endif
       T B_matrix[6 * spatial_dim * nodes_per_element];
       memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
 
@@ -465,48 +471,148 @@ class FEAnalysis {
 
     cppimpact_gemv<T, MatOp::NoTrans>(dof_per_element, dof_per_element, 1.0,
                                       K_e, element_dof, 0.0, f_internal);
+  }
 
-    // T intermediate_1[6];
-    // memset(intermediate_1, 0, 6 * sizeof(T));
+  static T calculate_strain_energy(const T *element_xloc, const T *element_dof,
+                                   BaseMaterial<T, dof_per_node> *material) {
+    T pt[spatial_dim];
+    T K_e[dof_per_element * dof_per_element];
+    memset(K_e, 0, sizeof(T) * dof_per_element * dof_per_element);
 
-    // // multiply B*u
-    // cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0,
-    // B_matrix,
-    //                                   element_dof, 0.0,
-    //                                   intermediate_1);
-    // // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 30, 1.0, B_matrix,
-    // 30,
-    // //             element_dof, 1, 0.0, intermediate_1, 1);
+    T volume = 0.0;
 
-    // // multiply D*intermediate_1
-    // cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix,
-    // intermediate_1,
-    //                                   0.0, sigma);
-    // // cblas_dgemv(CblasRowMajor, CblasNoTrans, 6, 6, 1.0, D_matrix, 6,
-    // //             intermediate_1, 1, 0.0, sigma, 1);
+    for (int i = 0; i < num_quadrature_pts; i++) {
+      T weight = Quadrature::template get_quadrature_pt<T>(i, pt);
 
-    // // T stress_vector[6];
-    // // stress_vector[0] = sigma[0]; // sigma_xx
-    // // stress_vector[1] = sigma[4]; // sigma_yy
-    // // stress_vector[2] = sigma[8]; // sigma_zz
-    // // stress_vector[3] = sigma[1]; // sigma_xy
-    // // stress_vector[4] = sigma[5]; // sigma_yz
-    // // stress_vector[5] = sigma[2]; // sigma_xz
+      // Evaluate the derivative of the spatial dof in the computational
+      // coordinates
+      T J[spatial_dim * spatial_dim];
+      Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
-    // T BTS[spatial_dim * nodes_per_element];
-    // memset(BTS, 0, sizeof(T) * spatial_dim * nodes_per_element);
+      // Compute the inverse and determinant of the Jacobian matrix
+      T Jinv[spatial_dim * spatial_dim];
+      T detJ = inv3x3(J, Jinv);
 
-    // // multiply B^T by S
-    // cppimpact_gemv<T, MatOp::Trans>(6, dof_per_element, 1.0, B_matrix,
-    // sigma,
-    //                                 0.0, BTS);
-    // // cblas_dgemv(CblasRowMajor, CblasTrans, 6, 30, 1.0, B_matrix, 30,
-    // sigma,
-    // //             1, 0.0, BTS, 1);
+      printf("detJ = %f\n", detJ);
+      volume += weight * detJ;
 
-    // for (int j = 0; j < spatial_dim * nodes_per_element; j++) {
-    //   f_internal[j] += weight * detJ * BTS[j];
-    // }
+      printf("J matrix quad:\n");
+      for (int row = 0; row < spatial_dim; ++row) {
+        for (int col = 0; col < spatial_dim; ++col) {
+          printf("%f ", J[row * spatial_dim + col]);
+        }
+        printf("\n");
+      }
+
+      printf("Jinv matrix quad:\n");
+      for (int row = 0; row < spatial_dim; ++row) {
+        for (int col = 0; col < spatial_dim; ++col) {
+          printf("%f ", Jinv[row * spatial_dim + col]);
+        }
+        printf("\n");
+      }
+
+#ifdef CPPIMPACT_DEBUG_MODE
+      if (detJ < 0.0) {
+        printf("detJ negative\n");
+      }
+#endif
+
+      // Compute the B matrix
+      T B_matrix[6 * spatial_dim * nodes_per_element];
+      memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
+      Basis::calculate_B_matrix(Jinv, pt, B_matrix);
+
+      // Compute the material stiffness matrix D
+      T D_matrix[6 * 6];
+      memset(D_matrix, 0, 6 * 6 * sizeof(T));
+      Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix);
+
+      // Compute B^T * D * B
+      T B_T_D_B[dof_per_element * dof_per_element];
+      memset(B_T_D_B, 0, sizeof(T) * dof_per_element * dof_per_element);
+      calculate_B_T_D_B(B_matrix, D_matrix, B_T_D_B);
+
+      // Assemble the element stiffness matrix K_e
+      for (int j = 0; j < dof_per_element * dof_per_element; j++) {
+        K_e[j] += weight * detJ * B_T_D_B[j];
+      }
+    }
+
+    printf("volume = %f\n", volume);
+    // Compute the strain energy W = 0.5 * u^T * K_e * u
+    T W = 0.0;
+
+    // Temporary vector to store K_e * u
+    T temp[dof_per_element];
+    cppimpact_gemv<T, MatOp::NoTrans>(dof_per_element, dof_per_element, 1.0,
+                                      K_e, element_dof, 0.0, temp);
+
+    // Compute W = 0.5 * u^T * (K_e * u)
+    for (int i = 0; i < dof_per_element; i++) {
+      W += element_dof[i] * temp[i];
+    }
+    W *= 0.5;
+
+    return W;
+  }
+
+  static void calculate_strain(const T *element_xloc, const T *element_dof,
+                               const T *pt, T *strain,
+                               BaseMaterial<T, dof_per_node> *material) {
+    T J[spatial_dim * spatial_dim];
+    Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
+
+    // Compute the inverse and determinant of the Jacobian matrix
+    T Jinv[spatial_dim * spatial_dim];
+    T detJ = inv3x3(J, Jinv);
+
+    // Print the J matrix
+    printf("J matrix:\n");
+    for (int row = 0; row < spatial_dim; ++row) {
+      for (int col = 0; col < spatial_dim; ++col) {
+        printf("%f ", J[row * spatial_dim + col]);
+      }
+      printf("\n");
+    }
+
+    // Print the Jinv matrix
+    printf("Jinv matrix:\n");
+    for (int row = 0; row < spatial_dim; ++row) {
+      for (int col = 0; col < spatial_dim; ++col) {
+        printf("%f ", Jinv[row * spatial_dim + col]);
+      }
+      printf("\n");
+    }
+
+    // Compute the B matrix
+    T B_matrix[6 * spatial_dim * nodes_per_element];
+    memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
+    Basis::calculate_B_matrix(Jinv, pt, B_matrix);
+
+    // Print the B matrix
+    printf("B matrix:\n");
+    for (int row = 0; row < 6; ++row) {
+      for (int col = 0; col < spatial_dim * nodes_per_element; ++col) {
+        printf("%f ", B_matrix[row * spatial_dim * nodes_per_element + col]);
+      }
+      printf("\n");
+    }
+
+    // multiply B*u
+    cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0, B_matrix,
+                                      element_dof, 0.0, strain);
+    // Print the element degrees of freedom
+    printf("Element degrees of freedom:\n");
+    for (int i = 0; i < dof_per_element; ++i) {
+      printf("element_dof[%d] = %f\n", i, element_dof[i]);
+    }
+
+    // Print the strain values
+    printf("Strain values:\n");
+    for (int i = 0; i < 6; ++i) {
+      printf("strain[%d] = %f\n", i, strain[i]);
+    }
   }
 };
 

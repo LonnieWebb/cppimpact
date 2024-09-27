@@ -17,7 +17,20 @@
 #include "include/dynamics.h"
 #endif
 
-int main(int argc, char *argv[]) {
+// Function to print a 3x3 matrix
+template <typename T>
+void print_matrix(const T M[], const std::string& name) {
+  std::cout << name << ":\n";
+  for (int i = 0; i < 3; ++i) {
+    std::cout << "  ";
+    for (int j = 0; j < 3; ++j) {
+      std::cout << std::setw(10) << M[i * 3 + j] << " ";
+    }
+    std::cout << "\n";
+  }
+}
+
+int main(int argc, char* argv[]) {
   printf("FEA DEBUG\n");
 #ifdef CPPIMPACT_CUDA_BACKEND
   using T = double;
@@ -33,7 +46,7 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
+  std::string filename("../input/simple tet.inp");
   Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties
@@ -47,12 +60,6 @@ int main(int argc, char *argv[]) {
 
   Elastoplastic<T, dof_per_node> material(E, rho, nu, beta, H, Y0, name);
   tensile.load_mesh(filename);
-
-  // Position and velocity in x, y, z
-  T init_position[] = {0, 0, 0};
-  T init_velocity[] = {0, 0, 0};
-
-  int export_interval = 1;
 
   const int normal = 1;
   std::string wall_name = "Wall";
