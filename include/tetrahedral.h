@@ -407,11 +407,6 @@ class TetrahedralBasisLinear {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
-    for (int i = 0; i < nodes_per_element; i++) {
-      printf("xloc[%d]: %f, %f, %f\n", i, xloc[dim * i], xloc[dim * i + 1],
-             xloc[dim * i + 2]);
-    }
-
     // Initialize grad (Jacobian matrix) to zero
     memset(grad, 0, spatial_dim * dim * sizeof(T));
 
@@ -457,10 +452,6 @@ class TetrahedralBasisLinear {
     T Nxi[spatial_dim * nodes_per_element];
     eval_basis_grad(pt, Nxi);
 
-    for (int i = 0; i < spatial_dim * nodes_per_element; ++i) {
-      printf("Nxi[%d]: %f\n", i, Nxi[i]);
-    }
-
     for (int node = 0; node < nodes_per_element; ++node) {
       T dNdx[spatial_dim];  // Placeholder for gradients in global coordinates
                             // for this node
@@ -473,7 +464,6 @@ class TetrahedralBasisLinear {
           dNdx[i] += Jinv[j * spatial_dim + i] * Nxi[node * spatial_dim + j];
         }
       }
-      printf("dNdx[%d]: %f, %f, %f\n", node, dNdx[0], dNdx[1], dNdx[2]);
 
       // Index in the B matrix for the current node
       int idx = 3 * node;

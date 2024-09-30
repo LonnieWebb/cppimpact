@@ -238,6 +238,7 @@ class Dynamics {
     std::vector<int> this_element_nodes(nodes_per_element);
 
     T total_energy = 0.0;
+    T total_volume = 0.0;
     T *node_coords = new T[spatial_dim];
     T *element_strains = new T[6];
 
@@ -264,6 +265,9 @@ class Dynamics {
       T element_W = Analysis::calculate_strain_energy(
           element_xloc.data(), element_dof.data(), material);
 
+      T element_volume = Analysis::calculate_volume(
+          element_xloc.data(), element_dof.data(), material);
+
       for (int node = 0; node < nodes_per_element; node++) {
         memset(element_strains, 0, sizeof(T) * 6);
         for (int k = 0; k < spatial_dim; k++) {
@@ -281,9 +285,12 @@ class Dynamics {
       }
 
       total_energy += element_W;
+      total_volume += element_volume;
     }
 
     printf("Total Strain Energy = %f\n", total_energy);
+    printf("Total Volume = %f\n", total_volume);
+
     for (int i = 0; i < ndof; i++) {
       global_xloc[i] += global_dof[i];
     }

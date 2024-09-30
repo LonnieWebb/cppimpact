@@ -493,25 +493,6 @@ class FEAnalysis {
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
 
-      printf("detJ = %f\n", detJ);
-      volume += weight * detJ;
-
-      printf("J matrix quad:\n");
-      for (int row = 0; row < spatial_dim; ++row) {
-        for (int col = 0; col < spatial_dim; ++col) {
-          printf("%f ", J[row * spatial_dim + col]);
-        }
-        printf("\n");
-      }
-
-      printf("Jinv matrix quad:\n");
-      for (int row = 0; row < spatial_dim; ++row) {
-        for (int col = 0; col < spatial_dim; ++col) {
-          printf("%f ", Jinv[row * spatial_dim + col]);
-        }
-        printf("\n");
-      }
-
 #ifdef CPPIMPACT_DEBUG_MODE
       if (detJ < 0.0) {
         printf("detJ negative\n");
@@ -537,24 +518,50 @@ class FEAnalysis {
       for (int j = 0; j < dof_per_element * dof_per_element; j++) {
         K_e[j] += weight * detJ * B_T_D_B[j];
       }
+      volume += weight * detJ;
     }
+    printf("Element DOF: ");
+    for (int j = 0; j < dof_per_element; ++j) {
+      printf("%f ", element_dof[j]);
+    }
+    printf("\n");
 
-    printf("volume = %f\n", volume);
-    // Compute the strain energy W = 0.5 * u^T * K_e * u
-    T W = 0.0;
-
-    // Temporary vector to store K_e * u
-    T temp[dof_per_element];
+    T Ku[dof_per_element];
+    memset(Ku, 0, sizeof(T) * dof_per_element);
+    // Multiply K_e * u
     cppimpact_gemv<T, MatOp::NoTrans>(dof_per_element, dof_per_element, 1.0,
-                                      K_e, element_dof, 0.0, temp);
+                                      K_e, element_dof, 0.0, Ku);
 
-    // Compute W = 0.5 * u^T * (K_e * u)
-    for (int i = 0; i < dof_per_element; i++) {
-      W += element_dof[i] * temp[i];
+    T W = 0.0;
+    for (int j = 0; j < dof_per_element; j++) {
+      W += 0.5 * element_dof[j] * Ku[j];
     }
-    W *= 0.5;
 
     return W;
+  }
+
+  static T calculate_volume(const T *element_xloc, const T *element_dof,
+                            BaseMaterial<T, dof_per_node> *material) {
+    T pt[spatial_dim];
+
+    T volume = 0.0;
+
+    for (int i = 0; i < num_quadrature_pts; i++) {
+      T weight = Quadrature::template get_quadrature_pt<T>(i, pt);
+
+      // Evaluate the derivative of the spatial dof in the computational
+      // coordinates
+      T J[spatial_dim * spatial_dim];
+      Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
+
+      // Compute the inverse and determinant of the Jacobian matrix
+      T Jinv[spatial_dim * spatial_dim];
+      T detJ = inv3x3(J, Jinv);
+      volume += weight * detJ;
+    }
+    printf("volume = %f\n", volume);
+
+    return volume;
   }
 
   static void calculate_strain(const T *element_xloc, const T *element_dof,
@@ -567,52 +574,14 @@ class FEAnalysis {
     T Jinv[spatial_dim * spatial_dim];
     T detJ = inv3x3(J, Jinv);
 
-    // Print the J matrix
-    printf("J matrix:\n");
-    for (int row = 0; row < spatial_dim; ++row) {
-      for (int col = 0; col < spatial_dim; ++col) {
-        printf("%f ", J[row * spatial_dim + col]);
-      }
-      printf("\n");
-    }
-
-    // Print the Jinv matrix
-    printf("Jinv matrix:\n");
-    for (int row = 0; row < spatial_dim; ++row) {
-      for (int col = 0; col < spatial_dim; ++col) {
-        printf("%f ", Jinv[row * spatial_dim + col]);
-      }
-      printf("\n");
-    }
-
     // Compute the B matrix
     T B_matrix[6 * spatial_dim * nodes_per_element];
     memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
     Basis::calculate_B_matrix(Jinv, pt, B_matrix);
 
-    // Print the B matrix
-    printf("B matrix:\n");
-    for (int row = 0; row < 6; ++row) {
-      for (int col = 0; col < spatial_dim * nodes_per_element; ++col) {
-        printf("%f ", B_matrix[row * spatial_dim * nodes_per_element + col]);
-      }
-      printf("\n");
-    }
-
     // multiply B*u
     cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0, B_matrix,
                                       element_dof, 0.0, strain);
-    // Print the element degrees of freedom
-    printf("Element degrees of freedom:\n");
-    for (int i = 0; i < dof_per_element; ++i) {
-      printf("element_dof[%d] = %f\n", i, element_dof[i]);
-    }
-
-    // Print the strain values
-    printf("Strain values:\n");
-    for (int i = 0; i < 6; ++i) {
-      printf("strain[%d] = %f\n", i, strain[i]);
-    }
   }
 };
 
