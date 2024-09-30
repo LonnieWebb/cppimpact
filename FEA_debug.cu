@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/simple tet 2.inp");
+  std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
   Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties

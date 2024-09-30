@@ -427,11 +427,12 @@ class FEAnalysis {
                                    T *f_internal,
                                    BaseMaterial<T, dof_per_node> *material) {
     T pt[spatial_dim];
-    T sigma[6];
     T K_e[dof_per_element * dof_per_element];
     memset(K_e, 0, sizeof(T) * dof_per_element * dof_per_element);
+
     for (int i = 0; i < num_quadrature_pts; i++) {
       T weight = Quadrature::template get_quadrature_pt<T>(i, pt);
+
       // Evaluate the derivative of the spatial dof in the computational
       // coordinates
       T J[spatial_dim * spatial_dim];
@@ -446,24 +447,23 @@ class FEAnalysis {
         printf("detJ negative\n");
       }
 #endif
+
+      // Compute the B matrix
       T B_matrix[6 * spatial_dim * nodes_per_element];
       memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
-
       Basis::calculate_B_matrix(Jinv, pt, B_matrix);
 
+      // Compute the material stiffness matrix D
       T D_matrix[6 * 6];
       memset(D_matrix, 0, 6 * 6 * sizeof(T));
       Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix);
 
+      // Compute B^T * D * B
       T B_T_D_B[dof_per_element * dof_per_element];
       memset(B_T_D_B, 0, sizeof(T) * dof_per_element * dof_per_element);
-
       calculate_B_T_D_B(B_matrix, D_matrix, B_T_D_B);
 
-      // for (int p = 0; p < dof_per_element * dof_per_element; p++) {
-      //   printf("B_T_D_B[%d] = %f\n", p, B_T_D_B[p]);
-      // }
-
+      // Assemble the element stiffness matrix K_e
       for (int j = 0; j < dof_per_element * dof_per_element; j++) {
         K_e[j] += weight * detJ * B_T_D_B[j];
       }
@@ -520,11 +520,6 @@ class FEAnalysis {
       }
       volume += weight * detJ;
     }
-    printf("Element DOF: ");
-    for (int j = 0; j < dof_per_element; ++j) {
-      printf("%f ", element_dof[j]);
-    }
-    printf("\n");
 
     T Ku[dof_per_element];
     memset(Ku, 0, sizeof(T) * dof_per_element);

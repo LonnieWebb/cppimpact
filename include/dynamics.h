@@ -209,9 +209,9 @@ class Dynamics {
       T y = global_xloc[i * 3 + 1];
       T z = global_xloc[i * 3 + 2];
 
-      global_dof[i * 3 + 0] = strain * x;  // Displacement in x
-      // global_dof[i * 3 + 1] = -material->nu * strain * y;  // Displacement in
-      // y global_dof[i * 3 + 2] = -material->nu * strain * z;  // Displacement
+      global_dof[i * 3 + 0] = strain * global_xloc[i * 3];
+      global_dof[i * 3 + 1] = -material->nu * strain * y;  // Displacement in
+      global_dof[i * 3 + 2] = -material->nu * strain * z;  // Displacement
       // in z } else {
       //   T y = global_xloc[i * 3 + 1];
       //   T z = global_xloc[i * 3 + 2];
@@ -293,13 +293,6 @@ class Dynamics {
 
     for (int i = 0; i < ndof; i++) {
       global_xloc[i] += global_dof[i];
-    }
-    for (int i = 0; i < mesh->num_nodes; i++) {
-      printf("Node %d strains: ", i);
-      for (int j = 0; j < 6; j++) {
-        printf("%f ", global_strains[6 * i + j]);
-      }
-      printf("\n");
     }
 
     export_to_vtk(0, vel, global_acc, global_mass);

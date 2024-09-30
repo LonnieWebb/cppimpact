@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
 
   int export_interval = INT_MAX;
 #ifdef CPPIMPACT_DEBUG_MODE
-  export_interval = 10;
+  export_interval = 5;
 #endif
 
   Wall<T, 2, Basis> w(wall_name, location, E * 10, tensile.slave_nodes,
