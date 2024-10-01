@@ -37,7 +37,8 @@ int main(int argc, char* argv[]) {
 #else
   using T = double;
 #endif
-  using Basis = TetrahedralBasisLinear<T>;
+  // using Basis = TetrahedralBasisLinear<T>;
+  using Basis = TetrahedralBasisQuadratic<T>;
   using Quadrature = TetrahedralQuadrature;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
@@ -46,7 +47,7 @@ int main(int argc, char* argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
+  std::string filename("../input/quad tet.inp");
   Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties

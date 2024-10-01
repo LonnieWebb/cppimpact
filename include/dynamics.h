@@ -349,7 +349,7 @@ class Dynamics {
     double time = 0.0;
     // Initialize states
     update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
-        mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
+        mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall, mesh,
         element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
         global_strains, time);
 
@@ -377,7 +377,7 @@ class Dynamics {
       }
 
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
-          mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
+          mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall, mesh,
           element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
           global_strains, time);
 
