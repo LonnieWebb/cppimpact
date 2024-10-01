@@ -30,6 +30,9 @@ class Dynamics {
   T *global_xloc;
   T *vel;
   T *global_strains;
+  T *global_dof;
+  T *global_acc;
+  T *global_mass;
 
   Dynamics(Mesh<T, nodes_per_element> *input_mesh,
            BaseMaterial<T, dof_per_node> *input_material,
@@ -43,7 +46,10 @@ class Dynamics {
         global_xloc(
             new T[mesh->num_nodes *
                   dof_per_node]),  // Allocate memory for global_xloc here
-        global_strains(new T[mesh->num_nodes * 6]) {
+        global_strains(new T[mesh->num_nodes * 6]),
+        global_dof(new T[mesh->num_nodes * dof_per_node]),
+        global_acc(new T[mesh->num_nodes * dof_per_node]),
+        global_mass(new T[mesh->num_nodes * dof_per_node]) {
     ndof = mesh->num_nodes * dof_per_node;
   }
 
@@ -52,6 +58,9 @@ class Dynamics {
     delete[] vel;
     delete[] global_xloc;
     delete[] global_strains;
+    delete[] global_dof;
+    delete[] global_acc;
+    delete[] global_mass;
   }
 
   // Initialize the body. Move the mesh origin to init_position and give all
@@ -323,10 +332,6 @@ class Dynamics {
     // Material and mesh information
     int *element_nodes = mesh->element_nodes;
 
-    // Allocate global data
-    T *global_dof = new T[ndof];
-    T *global_acc = new T[ndof];
-    T *global_mass = new T[ndof];
     // Initialize global data
     memcpy(global_xloc, mesh->xloc,
            ndof * sizeof(T));  // mesh->xloc will store initial positions
@@ -346,7 +351,7 @@ class Dynamics {
     update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
         mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
         element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
-        time);
+        global_strains, time);
 
     // b.Stagger V0 .5 = V0 + dt / 2 * a0
     // Update velocity
@@ -374,7 +379,7 @@ class Dynamics {
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
           mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall,
           element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
-          time);
+          global_strains, time);
 
       // Compute total mass (useful?)
       T total_mass = 0.0;

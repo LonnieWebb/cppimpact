@@ -10,7 +10,8 @@ template <typename T, int spatial_dim, int nodes_per_element, class Basis,
 void update(int num_nodes, int num_elements, int ndof, T dt,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
             const int *element_nodes, const T *vel, const T *global_xloc,
-            const T *global_dof, T *global_acc, T *global_mass, T time) {
+            const T *global_dof, T *global_acc, T *global_mass,
+            T *global_strains, T time) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
   // Zero-out states
@@ -23,6 +24,7 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
   std::vector<T> element_dof(dof_per_element);
   std::vector<T> element_acc(dof_per_element);
   std::vector<T> element_internal_forces(dof_per_element);
+  std::vector<T> element_strains(6);  // hardcoded for 3d
   std::vector<int> this_element_nodes(nodes_per_element);
 
   // 2. Compute A1 = (Fext - Fint(U1)/M
@@ -67,13 +69,13 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
   }
 
   for (int i = 0; i < num_elements; i++) {
-    for (int k = 0; k < dof_per_element; k++) {
-      element_mass_matrix_diagonals[k] = 0.0;
-      element_xloc[k] = 0.0;
-      element_dof[k] = 0.0;
-      element_acc[k] = 0.0;
-      element_internal_forces[k] = 0.0;
-    }
+    memset(element_mass_matrix_diagonals.data(), 0,
+           sizeof(T) * dof_per_element);
+    memset(element_xloc.data(), 0, sizeof(T) * dof_per_element);
+    memset(element_dof.data(), 0, sizeof(T) * dof_per_element);
+    memset(element_acc.data(), 0, sizeof(T) * dof_per_element);
+    memset(element_internal_forces.data(), 0, sizeof(T) * dof_per_element);
+    memset(element_strains.data(), 0, sizeof(T) * 6);
 
     for (int j = 0; j < nodes_per_element; j++) {
       this_element_nodes[j] = element_nodes[nodes_per_element * i + j];
@@ -98,13 +100,18 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
       Mr_inv[k] = 1.0 / element_mass_matrix_diagonals[k];
     }
 
-    // DEBUGGING: Error in here somewhere, most likely
     Analysis::calculate_f_internal(element_xloc.data(), element_dof.data(),
                                    element_internal_forces.data(), material);
 
     for (int j = 0; j < dof_per_element; j++) {
       element_acc[j] = Mr_inv[j] * (-element_internal_forces[j]);
     }
+
+    // Currently set up for linear element only
+    T pt[3] = {0.0, 0.0, 0.0};
+    Analysis::calculate_strain(element_xloc.data(), element_dof.data(), pt,
+                               element_strains.data(), material);
+
     // assemble global acceleration
     for (int j = 0; j < nodes_per_element; j++) {
       int node = this_element_nodes[j];
@@ -112,6 +119,16 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
       global_acc[3 * node] += element_acc[3 * j];
       global_acc[3 * node + 1] += element_acc[3 * j + 1];
       global_acc[3 * node + 2] += element_acc[3 * j + 2];
+    }
+
+    // assemble global strains
+    for (int j = 0; j < nodes_per_element; j++) {
+      global_strains[6 * this_element_nodes[j]] = element_strains[0];
+      global_strains[6 * this_element_nodes[j] + 1] = element_strains[1];
+      global_strains[6 * this_element_nodes[j] + 2] = element_strains[2];
+      global_strains[6 * this_element_nodes[j] + 3] = element_strains[3];
+      global_strains[6 * this_element_nodes[j] + 4] = element_strains[4];
+      global_strains[6 * this_element_nodes[j] + 5] = element_strains[5];
     }
   }
 
