@@ -1,6 +1,7 @@
 #include <cblas.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <string>
 
 #include "include/analysis.h"
@@ -32,14 +33,34 @@ void print_matrix(const T M[], const std::string& name) {
 
 int main(int argc, char* argv[]) {
   printf("FEA DEBUG\n");
+
+  // Default values
+  int input_file = 0;
+  int deformation = 0;
+
+  // Parse command-line arguments
+  if (argc >= 2) {
+    input_file = std::atoi(argv[1]);
+  }
+  if (argc >= 3) {
+    deformation = std::atoi(argv[2]);
+  }
+
 #ifdef CPPIMPACT_CUDA_BACKEND
   using T = double;
 #else
   using T = double;
 #endif
-  // using Basis = TetrahedralBasisLinear<T>;
+
+#if defined(USE_LINEAR_BASIS)
+  using Basis = TetrahedralBasisLinear<T>;
+#elif defined(USE_QUADRATIC_BASIS)
   using Basis = TetrahedralBasisQuadratic<T>;
-  using Quadrature = TetrahedralQuadrature;
+#else
+#error "No basis type defined"
+#endif
+
+  using Quadrature = TetrahedralQuadrature5pts;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
@@ -47,8 +68,48 @@ int main(int argc, char* argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/quad tet.inp");
+  // std::string filename("../input/quad tet.inp");
+  // std::string filename("../input/0.25 cube calculix quad 5758 elem.inp");
   Mesh<T, Basis::nodes_per_element> tensile;
+
+  std::string filename;
+#if defined(USE_LINEAR_BASIS)
+  switch (input_file) {
+    case 0:
+      filename = "../input/linear tet.inp";
+      printf("Using linear tetrahedral element\n");
+      break;
+    case 1:
+      filename = "../input/0.25 cube calculix linear 5758 elem.inp";
+      printf("Using linear tetrahedral cube\n");
+
+      break;
+    default:
+      std::cerr << "Invalid input_file for linear basis: " << input_file
+                << std::endl;
+      return 1;
+  }
+
+#elif defined(USE_QUADRATIC_BASIS)
+  switch (input_file) {
+    case 0:
+      filename = "../input/quad tet.inp";
+      printf("Using quadratic tetrahedral element\n");
+
+      break;
+    case 1:
+      filename = "../input/0.25 cube calculix quad 39247 elem.inp";
+      printf("Using quadratic tetrahedral cube\n");
+
+      break;
+    default:
+      std::cerr << "Invalid input_file for linear basis: " << input_file
+                << std::endl;
+      return 1;
+  }
+#else
+#error "No basis type defined"
+#endif
 
   // Material Properties
   T E = 68.9E9;  // Pa
@@ -72,7 +133,7 @@ int main(int argc, char* argv[]) {
 
   // Solve loop with total timer
   auto start = std::chrono::high_resolution_clock::now();
-  dyna.debug_strain(0.01, 0, 9.99E-002, 1e-5);
+  dyna.debug_strain(0.01, deformation);
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;

@@ -16,7 +16,7 @@ __global__ void update(int num_elements, T dt,
                        T *d_global_acc, T *d_global_mass,
                        const int nodes_per_elem_num_quad, T time) {
   using Basis = TetrahedralBasisQuadratic<T>;
-  using Quadrature = TetrahedralQuadrature;
+  using Quadrature = TetrahedralQuadrature5pts;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 

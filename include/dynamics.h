@@ -204,8 +204,7 @@ class Dynamics {
     std::cout << "Exported " << filename << std::endl;
   }
 
-  void debug_strain(const T strain, const int strain_dim, const T static_coord,
-                    const T tol) {
+  void debug_strain(const T alpha, const int def_case) {
     memcpy(global_xloc, mesh->xloc,
            ndof * sizeof(T));  // mesh->xloc will store initial positions
     T *global_dof = new T[ndof];
@@ -213,27 +212,32 @@ class Dynamics {
     memset(global_dof, 0, sizeof(T) * ndof);
 
     for (int i = 0; i < mesh->num_nodes; i++) {
-      // if (abs(global_xloc[i * 3 + strain_dim] - static_coord) > tol) {
       T x = global_xloc[i * 3 + 0];
       T y = global_xloc[i * 3 + 1];
       T z = global_xloc[i * 3 + 2];
 
-      global_dof[i * 3 + 0] = strain * global_xloc[i * 3];
-      global_dof[i * 3 + 1] = -material->nu * strain * y;  // Displacement in
-      global_dof[i * 3 + 2] = -material->nu * strain * z;  // Displacement
-      // in z } else {
-      //   T y = global_xloc[i * 3 + 1];
-      //   T z = global_xloc[i * 3 + 2];
-      //   global_dof[i * 3 + 0] = 0.0;
-      //   global_dof[i * 3 + 1] =
-      //       -material->nu * strain * y;  // Displacement in y
-      //   global_dof[i * 3 + 2] =
-      //       -material->nu * strain * z;  // Displacement in z
-      // }
-    }
+      switch (def_case) {
+        case 0:
+          if (i == 0) {
+            printf("Constant displacement case\n");
+          }
 
-    T *global_acc = new T[ndof];
-    T *global_mass = new T[ndof];
+          global_dof[i * 3 + 0] = alpha * x;
+          global_dof[i * 3 + 1] = alpha * y;
+          global_dof[i * 3 + 2] = alpha * z;
+          break;
+        case 1:
+          if (i == 0) {
+            printf("Linear displacement case\n");
+          }
+          global_dof[i * 3 + 0] = alpha * 0.5 * x * x;
+          global_dof[i * 3 + 1] = alpha * 0.5 * y * y;
+          global_dof[i * 3 + 2] = alpha * 0.5 * z * z;
+          break;
+        default:
+          break;
+      }
+    }
 
     memset(vel, 0, sizeof(T) * ndof);
     memset(global_acc, 0, sizeof(T) * ndof);

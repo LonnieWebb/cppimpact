@@ -4,7 +4,7 @@
 
 #include "cppimpact_defs.h"
 
-class TetrahedralQuadrature {
+class TetrahedralQuadrature5pts {
  public:
   static const int num_quadrature_pts = 5;
 
@@ -35,6 +35,39 @@ class TetrahedralQuadrature {
       pt[1] = 0.16666666666;
       pt[2] = 0.5;
       return 0.075;
+    }
+    return 0.0;
+  }
+};
+
+class TetrahedralQuadrature4pts {
+ public:
+  static const int num_quadrature_pts = 4;
+
+  template <typename T>
+  static CPPIMPACT_FUNCTION T get_quadrature_pt(int k, T pt[]) {
+    constexpr T alpha = 0.58541020;
+    constexpr T beta = 0.13819660;
+    if (k == 0) {
+      pt[0] = beta;
+      pt[1] = beta;
+      pt[2] = beta;
+      return 0.25;
+    } else if (k == 1) {
+      pt[0] = alpha;
+      pt[1] = beta;
+      pt[2] = beta;
+      return 0.25;
+    } else if (k == 2) {
+      pt[0] = beta;
+      pt[1] = alpha;
+      pt[2] = beta;
+      return 0.25;
+    } else if (k == 3) {
+      pt[0] = beta;
+      pt[1] = beta;
+      pt[2] = alpha;
+      return 0.25;
     }
     return 0.0;
   }
@@ -146,48 +179,74 @@ coeffs[Nxi_offset_3][3];
     __syncthreads();
   }
 
+  static CPPIMPACT_FUNCTION void eval_basis(const T pt[], T N[]) {
+    T L1 = 1.0 - pt[0] - pt[1] - pt[2];
+    T L2 = pt[0];
+    T L3 = pt[1];
+    T L4 = pt[2];
+    N[0] = (2 * L2 - 1) * L2;  // Node 1, 2 from paper
+    N[1] = (2 * L3 - 1) * L3;  // Node 2, 3 from paper
+    N[2] = (2 * L1 - 1) * L1;  // Node 3, 1 from paper
+    N[3] = (2 * L4 - 1) * L4;  // Node 4, 4 from paper
+    N[4] = 4 * L2 * L3;        // Node 5, 8 from paper
+    N[5] = 4 * L1 * L3;        // Node 6, 6 from paper
+    N[6] = 4 * L1 * L2;        // Node 7, 5 from paper
+    N[7] = 4 * L2 * L4;        // Node 8, 10 from paper
+    N[8] = 4 * L3 * L4;        // Node 9, 9 from paper
+    N[9] = 4 * L1 * L4;        // Node 10, 7 from paper
+  }
+
   static CPPIMPACT_FUNCTION void eval_basis_grad(const T pt[], T Nxi[]) {
     // Corner node derivatives
-    Nxi[0] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
-    Nxi[1] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
-    Nxi[2] = 4.0 * pt[0] + 4.0 * pt[1] + 4.0 * pt[2] - 3.0;
+    // Node 1
+    Nxi[0] = 4 * pt[0] - 1;
+    Nxi[1] = 0.0;
+    Nxi[2] = 0.0;
 
-    Nxi[3] = 4.0 * pt[0] - 1.0;
-    Nxi[4] = 0.0;
+    // Node 2
+    Nxi[3] = 0.0;
+    Nxi[4] = 4 * pt[1] - 1;
     Nxi[5] = 0.0;
 
-    Nxi[6] = 0.0;
-    Nxi[7] = 4.0 * pt[1] - 1.0;
-    Nxi[8] = 0.0;
+    // Node 3
+    Nxi[6] = 4 * pt[0] + 4 * pt[1] + 4 * pt[2] - 3;
+    Nxi[7] = 4 * pt[1] + 4 * pt[0] + 4 * pt[2] - 3;
+    Nxi[8] = 4 * pt[2] + 4 * pt[0] + 4 * pt[1] - 3;
 
+    // Node 4
     Nxi[9] = 0.0;
     Nxi[10] = 0.0;
     Nxi[11] = 4.0 * pt[2] - 1.0;
 
-    // Mid node derivatives
-    Nxi[12] = -4.0 * (2.0 * pt[0] + pt[1] + pt[2] - 1.0);
-    Nxi[13] = -4.0 * pt[0];
-    Nxi[14] = -4.0 * pt[0];
+    // Node 5
+    Nxi[12] = 4 * pt[1];
+    Nxi[13] = 4 * pt[0];
+    Nxi[14] = 0.0;
 
-    Nxi[15] = 4.0 * pt[1];
-    Nxi[16] = 4.0 * pt[0];
-    Nxi[17] = 0.0;
+    // Node 6
+    Nxi[15] = -4 * pt[1];
+    Nxi[16] = -8 * pt[1] - 4 * pt[0] - 4 * pt[2] + 4;
+    Nxi[17] = -4 * pt[1];
 
-    Nxi[18] = -4.0 * pt[1];
-    Nxi[19] = -4.0 * (pt[0] + 2.0 * pt[1] + pt[2] - 1.0);
-    Nxi[20] = -4.0 * pt[1];
+    // Node 7
+    Nxi[18] = -8 * pt[0] - 4 * pt[1] - 4 * pt[2] + 4;
+    Nxi[19] = -4 * pt[0];
+    Nxi[20] = -4 * pt[0];
 
-    Nxi[21] = -4.0 * pt[2];
-    Nxi[22] = -4.0 * pt[2];
-    Nxi[23] = -4.0 * (pt[0] + pt[1] + 2.0 * pt[2] - 1.0);
+    // Node 8
+    Nxi[21] = 4 * pt[2];
+    Nxi[22] = 0.0;
+    Nxi[23] = 4 * pt[0];
 
-    Nxi[24] = 4.0 * pt[2];
-    Nxi[25] = 0.0;
-    Nxi[26] = 4.0 * pt[0];
+    // Node 9
+    Nxi[24] = 0.0;
+    Nxi[25] = 4 * pt[2];
+    Nxi[26] = 4 * pt[1];
 
-    Nxi[27] = 0.0;
-    Nxi[28] = 4.0 * pt[2];
-    Nxi[29] = 4.0 * pt[1];
+    // Node 10
+    Nxi[27] = -4 * pt[2];
+    Nxi[28] = -4 * pt[2];
+    Nxi[29] = -8 * pt[2] - 4 * pt[0] - 4 * pt[1] + 4;
   }
 
   template <int dim>
@@ -208,6 +267,16 @@ coeffs[Nxi_offset_3][3];
       }
     }
   }
+
+  static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {
+    // PU functions from https://doi.org/10.1016/j.enganabound.2019.04.018
+    }
+
+  static CPPIMPACT_FUNCTION void eval_basis_grad_PU(const T pt[], T Nxi[]) {}
+
+  template <int dim>
+  static CPPIMPACT_FUNCTION void eval_grad_PU(const T pt[], const T dof[],
+                                              T grad[]) {}
 
 #ifdef CPPIMPACT_CUDA_BACKEND
   template <int num_quadrature_pts, int dim>
@@ -290,31 +359,13 @@ spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
     }
   }
 
-  static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {
-    // PU functions from https://doi.org/10.1016/j.enganabound.2019.04.018
-    T L1 = 1.0 - pt[0] - pt[1] - pt[2];
-    T L2 = pt[0];
-    T L3 = pt[1];
-    T L4 = pt[2];
-    N[0] = L2 * L2;      // 2 from paper
-    N[1] = L3 * L3;      // 3 from paper
-    N[2] = L1 * L1;      // 1 from paper
-    N[3] = L4 * L4;      // 4 from paper
-    N[4] = 2 * L2 * L3;  // 8 from paper
-    N[5] = 2 * L1 * L3;  // 6 from paper
-    N[6] = 2 * L1 * L2;  // 5 from paper
-    N[7] = 2 * L2 * L4;  // 10 from paper
-    N[8] = 2 * L3 * L4;  // 9 from paper
-    N[9] = 2 * L1 * L4;  // 7 from paper
-  }
-
   static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T* pt,
                                                     T B[]) {
     // Assuming Nxi is in element coordinates and has dimensions [spatial_dim
     // * nodes_per_element] B matrix should have dimensions [6 *
     // (3*nodes_per_element)], flattened into 1D array
     T Nxi[spatial_dim * nodes_per_element];
-    eval_basis_grad(pt, Nxi);
+    eval_basis_grad(pt, Nxi);  // would be PU basis
 
     for (int node = 0; node < nodes_per_element; ++node) {
       T dNdx[spatial_dim];  // Placeholder for gradients in global coordinates
@@ -370,6 +421,14 @@ spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
       D_matrix[i] *=
           material->E / ((1 + material->nu) * (1 - 2 * material->nu));
     }
+
+    // // Print the D matrix
+    // for (int i = 0; i < 6; ++i) {
+    //   for (int j = 0; j < 6; ++j) {
+    //     printf("%f ", D_matrix[i * 6 + j]);
+    //   }
+    //   printf("\n");
+    // }
   }
 };
 
@@ -431,7 +490,7 @@ class TetrahedralBasisLinear {
     }
   }
 
-  static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {
+  static CPPIMPACT_FUNCTION void eval_basis(const T pt[], T N[]) {
     // N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
     // N[1] = pt[0];                        // 3 from paper
     // N[2] = pt[1];                        // 1 from paper
@@ -503,5 +562,5 @@ class TetrahedralBasisLinear {
       D_matrix[i] *=
           material->E / ((1 + material->nu) * (1 - 2 * material->nu));
     }
-  }
+  };
 };

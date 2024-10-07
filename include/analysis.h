@@ -13,7 +13,7 @@ template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis;
 using T = double;
 using Basis = TetrahedralBasisLinear<T>;
-using Quadrature = TetrahedralQuadrature;
+using Quadrature = TetrahedralQuadrature5pts;
 using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
@@ -47,7 +47,7 @@ template <typename T, const int nodes_per_element, const int dof_per_node,
 __global__ void energy_kernel(const int *element_nodes, const T *xloc,
                               const T *dof, T *total_energy, T *C1, T *D1) {
   using Analysis =
-      FEAnalysis<T, Basis, TetrahedralQuadrature, NeohookeanPhysics<T>>;
+      FEAnalysis<T, Basis, TetrahedralQuadrature5pts, NeohookeanPhysics<T>>;
   int element_index = blockIdx.x;
   int thread_index = threadIdx.x;
   const int dof_per_element = dof_per_node * nodes_per_element;
@@ -69,7 +69,7 @@ __global__ void energy_kernel(const int *element_nodes, const T *xloc,
   }
 
   T pt[spatial_dim];
-  T weight = TetrahedralQuadrature::get_quadrature_pt<T>(thread_index, pt);
+  T weight = TetrahedralQuadrature5pts::get_quadrature_pt<T>(thread_index, pt);
 
   // Evaluate the derivative of the spatial dof in the computational
   // coordinates
@@ -95,7 +95,7 @@ template <typename T, const int nodes_per_element, const int dof_per_node,
 __global__ void residual_kernel(int element_nodes[], const T xloc[],
                                 const T dof[], T res[], T *C1, T *D1) {
   using Analysis =
-      FEAnalysis<T, Basis, TetrahedralQuadrature, NeohookeanPhysics<T>>;
+      FEAnalysis<T, Basis, TetrahedralQuadrature5pts, NeohookeanPhysics<T>>;
   const int dof_per_element = dof_per_node * nodes_per_element;
 
   __shared__ T element_res[dof_per_element];
@@ -124,7 +124,7 @@ __global__ void residual_kernel(int element_nodes[], const T xloc[],
   __syncthreads();
 
   T pt[spatial_dim];
-  T weight = TetrahedralQuadrature::get_quadrature_pt<T>(threadIdx.x, pt);
+  T weight = TetrahedralQuadrature5pts::get_quadrature_pt<T>(threadIdx.x, pt);
 
   // Evaluate the derivative of the spatial dof in the computational
   // coordinates
@@ -234,7 +234,7 @@ class FEAnalysis {
     if (tid < num_quadrature_pts * nodes_per_element) {
       // Compute the invariants
       T N[nodes_per_element];
-      Basis::eval_basis_PU(pts + pts_offset, N);
+      Basis::eval_basis(pts + pts_offset, N);
       atomicAdd(&m_i[i], N[i] * coeff[k]);
     }
 
@@ -264,7 +264,7 @@ class FEAnalysis {
 
         // Compute the invariants
         T N[nodes_per_element];
-        Basis::eval_basis_PU(pt, N);
+        Basis::eval_basis(pt, N);
         m_i += N[i] * weight * detJ * element_density;
       }
       element_mass_matrix_diagonals[3 * i] = m_i;
@@ -438,6 +438,7 @@ class FEAnalysis {
       T J[spatial_dim * spatial_dim];
       Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
+      // standard basis here
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
       T detJ = inv3x3(J, Jinv);
@@ -449,6 +450,7 @@ class FEAnalysis {
 #endif
 
       // Compute the B matrix
+      // PU used here
       T B_matrix[6 * spatial_dim * nodes_per_element];
       memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
       Basis::calculate_B_matrix(Jinv, pt, B_matrix);
@@ -521,6 +523,15 @@ class FEAnalysis {
       volume += weight * detJ;
     }
 
+    // Print K_e as a matrix
+    // printf("Element stiffness matrix K_e:\n");
+    // for (int row = 0; row < dof_per_element; ++row) {
+    //   for (int col = 0; col < dof_per_element; ++col) {
+    //     printf("%f ", K_e[row * dof_per_element + col]);
+    //   }
+    //   printf("\n");
+    // }
+
     T Ku[dof_per_element];
     memset(Ku, 0, sizeof(T) * dof_per_element);
     // Multiply K_e * u
@@ -554,7 +565,7 @@ class FEAnalysis {
       T detJ = inv3x3(J, Jinv);
       volume += weight * detJ;
     }
-    printf("volume = %f\n", volume);
+    // printf("volume = %f\n", volume);
 
     return volume;
   }
@@ -584,7 +595,7 @@ class FEAnalysis {
 
 // using T = double;
 // using Basis = TetrahedralBasisQuadratic;
-// using Quadrature = TetrahedralQuadrature;
+// using Quadrature = TetrahedralQuadrature5pts;
 // using Physics = NeohookeanPhysics<T>;
 // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 // const int nodes_per_element = Basis::nodes_per_element;

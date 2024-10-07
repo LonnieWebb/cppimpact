@@ -37,10 +37,10 @@ int main(int argc, char *argv[]) {
 #ifdef CPPIMPACT_CUDA_BACKEND
   using Basis = TetrahedralBasisQuadratic<T>;
 #else
-  using Basis = TetrahedralBasisLinear<T>;
+  using Basis = TetrahedralBasisQuadratic<T>;
 
 #endif
-  using Quadrature = TetrahedralQuadrature;
+  using Quadrature = TetrahedralQuadrature5pts;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
+  std::string filename("../input/0.25 cube calculix quad 5758 elem.inp");
   Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties
@@ -78,12 +78,12 @@ int main(int argc, char *argv[]) {
   // Set the number of degrees of freedom
 
   // Position and velocity in x, y, z
-  T init_position[] = {0, 0, 0};
+  T init_position[] = {-9.99E-2, -9.99E-2, 1.501E-1};
   T init_velocity[] = {0, 0.0, -1};
 
   const int normal = 1;
   std::string wall_name = "Wall";
-  T location = -1.501E-1 - 0.00005;
+  T location = -0.00005;
   double dt = 1e-6;
   double time_end = smoke_test ? dt * 100 : 0.5;
 
