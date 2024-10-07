@@ -270,13 +270,93 @@ coeffs[Nxi_offset_3][3];
 
   static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {
     // PU functions from https://doi.org/10.1016/j.enganabound.2019.04.018
-    }
+    T L1 = 1.0 - pt[0] - pt[1] - pt[2];
+    T L2 = pt[0];
+    T L3 = pt[1];
+    T L4 = pt[2];
+    N[0] = L2 * L2;      // 2 from paper
+    N[1] = L3 * L3;      // 3 from paper
+    N[2] = L1 * L1;      // 1 from paper
+    N[3] = L4 * L4;      // 4 from paper
+    N[4] = 2 * L2 * L3;  // 8 from paper
+    N[5] = 2 * L1 * L3;  // 6 from paper
+    N[6] = 2 * L1 * L2;  // 5 from paper
+    N[7] = 2 * L2 * L4;  // 10 from paper
+    N[8] = 2 * L3 * L4;  // 9 from paper
+    N[9] = 2 * L1 * L4;  // 7 from paper
+  }
 
-  static CPPIMPACT_FUNCTION void eval_basis_grad_PU(const T pt[], T Nxi[]) {}
+  static CPPIMPACT_FUNCTION void eval_basis_grad_PU(const T pt[], T Nxi[]) {
+    // Node 1
+    Nxi[0] = 2 * pt[0];
+    Nxi[1] = 0.0;
+    Nxi[2] = 0.0;
+
+    // Node 2
+    Nxi[3] = 0.0;
+    Nxi[4] = 2 * pt[1];
+    Nxi[5] = 0.0;
+
+    // Node 3
+    Nxi[6] = 2 * pt[0] + 2 * pt[1] + 2 * pt[2] - 2;
+    Nxi[7] = 2 * pt[1] + 2 * pt[0] + 2 * pt[2] - 2;
+    Nxi[8] = 2 * pt[2] + 2 * pt[0] + 2 * pt[1] - 2;
+
+    // Node 4
+    Nxi[9] = 0.0;
+    Nxi[10] = 0.0;
+    Nxi[11] = 2 * pt[2];
+
+    // Mid node derivatives
+    // Node 5
+    Nxi[12] = 2 * pt[1];
+    Nxi[13] = 2 * pt[0];
+    Nxi[14] = 0;
+
+    // Node 6
+    Nxi[15] = -2 * pt[1];
+    Nxi[16] = -4.0 * pt[1] - 2.0 * pt[0] - 2.0 * pt[2] + 2.0;
+    Nxi[17] = -2 * pt[1];
+
+    // Node 7
+    Nxi[18] = -4.0 * pt[0] - 2 * pt[1] - 2 * pt[2] + 2;
+    Nxi[19] = -2 * pt[0];
+    Nxi[20] = -2 * pt[0];
+
+    // Node 8
+    Nxi[21] = 2 * pt[2];
+    Nxi[22] = 0;
+    Nxi[23] = 2 * pt[0];
+
+    // Node 9
+    Nxi[24] = 0.0;
+    Nxi[25] = 2 * pt[2];
+    Nxi[26] = 2 * pt[1];
+
+    // Node 10
+    Nxi[27] = -2 * pt[2];
+    Nxi[28] = -2 * pt[2];
+    Nxi[29] = -4.0 * pt[2] - 2.0 * pt[0] - 2.0 * pt[1] + 2.0;
+  }
 
   template <int dim>
   static CPPIMPACT_FUNCTION void eval_grad_PU(const T pt[], const T dof[],
-                                              T grad[]) {}
+                                              T grad[]) {
+    T Nxi[spatial_dim * nodes_per_element];
+    eval_basis_grad_PU(pt, Nxi);
+
+    memset(grad, 0, sizeof(T) * spatial_dim * dim);
+
+    for (int k = 0; k < dim; k++) {
+      for (int i = 0; i < nodes_per_element; i++) {
+        grad[spatial_dim * k] += Nxi[spatial_dim * i] * dof[dim * i + k];
+        grad[spatial_dim * k + 1] +=
+            Nxi[spatial_dim * i + 1] * dof[dim * i + k];
+        grad[spatial_dim * k + 2] +=
+            Nxi[spatial_dim * i + 2] * dof[dim * i + k];
+      }
+    }
+  }
 
 #ifdef CPPIMPACT_CUDA_BACKEND
   template <int num_quadrature_pts, int dim>
