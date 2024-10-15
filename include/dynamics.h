@@ -33,6 +33,7 @@ class Dynamics {
   T *global_dof;
   T *global_acc;
   T *global_mass;
+  T *vel_i;
 
   Dynamics(Mesh<T, nodes_per_element> *input_mesh,
            BaseMaterial<T, dof_per_node> *input_material,
@@ -49,7 +50,8 @@ class Dynamics {
         global_strains(new T[mesh->num_nodes * 6]),
         global_dof(new T[mesh->num_nodes * dof_per_node]),
         global_acc(new T[mesh->num_nodes * dof_per_node]),
-        global_mass(new T[mesh->num_nodes * dof_per_node]) {
+        global_mass(new T[mesh->num_nodes * dof_per_node]),
+        vel_i(new T[mesh->num_nodes * dof_per_node]) {
     ndof = mesh->num_nodes * dof_per_node;
   }
 
@@ -61,6 +63,7 @@ class Dynamics {
     delete[] global_dof;
     delete[] global_acc;
     delete[] global_mass;
+    delete[] vel_i;
   }
 
   // Initialize the body. Move the mesh origin to init_position and give all
@@ -223,16 +226,16 @@ class Dynamics {
           }
 
           global_dof[i * 3 + 0] = alpha * x;
-          global_dof[i * 3 + 1] = alpha * y;
-          global_dof[i * 3 + 2] = alpha * z;
+          global_dof[i * 3 + 1] = -alpha * x * material->nu;
+          global_dof[i * 3 + 2] = -alpha * x * material->nu;
           break;
         case 1:
           if (i == 0) {
             printf("Linear displacement case\n");
           }
           global_dof[i * 3 + 0] = alpha * 0.5 * x * x;
-          global_dof[i * 3 + 1] = alpha * 0.5 * y * y;
-          global_dof[i * 3 + 2] = alpha * 0.5 * z * z;
+          global_dof[i * 3 + 1] = -alpha * 0.5 * x * x * material->nu;
+          global_dof[i * 3 + 2] = -alpha * 0.5 * x * x * material->nu;
           break;
         default:
           break;
@@ -346,7 +349,6 @@ class Dynamics {
     }
 
     // Intermediate velocity for vtk export
-    T *vel_i = new T[ndof];
     for (int i = 0; i < ndof; i++) {
       vel_i[i] = 0.0;
     }

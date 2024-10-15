@@ -29,6 +29,11 @@ class Dynamics {
   Wall<T, 2, Basis> *wall;
   T *global_xloc;
   T *vel;
+  T *global_strains;
+  T *global_dof;
+  T *global_acc;
+  T *global_mass;
+  T *vel_i;
 
   Dynamics(Mesh<T, nodes_per_element> *input_mesh,
            BaseMaterial<T, dof_per_node> *input_material,
@@ -41,8 +46,12 @@ class Dynamics {
         vel(new T[mesh->num_nodes * dof_per_node]),
         global_xloc(
             new T[mesh->num_nodes *
-                  dof_per_node])  // Allocate memory for global_xloc here
-  {
+                  dof_per_node]),  // Allocate memory for global_xloc here
+        global_strains(new T[mesh->num_nodes * 6]),
+        global_dof(new T[mesh->num_nodes * dof_per_node]),
+        global_acc(new T[mesh->num_nodes * dof_per_node]),
+        global_mass(new T[mesh->num_nodes * dof_per_node]),
+        vel_i(new T[mesh->num_nodes * dof_per_node]) {
     ndof = mesh->num_nodes * dof_per_node;
   }
 
@@ -50,6 +59,11 @@ class Dynamics {
     delete[] reduced_nodes;
     delete[] vel;
     delete[] global_xloc;
+    delete[] global_strains;
+    delete[] global_dof;
+    delete[] global_acc;
+    delete[] global_mass;
+    delete[] vel_i;
   }
 
   // Initialize the body. Move the mesh origin to init_position and give all
@@ -178,18 +192,6 @@ class Dynamics {
     std::cout << "Exported " << filename << std::endl;
   }
 
-  // void add_element_vec_3D(const int this_element_nodes[], T *element_vec,
-  //                         T *global_vec)
-  // {
-  //   for (int j = 0; j < nodes_per_element; j++)
-  //   {
-  //     int node = this_element_nodes[j];
-  //     global_vec[3 * node] += element_vec[3 * j];
-  //     global_vec[3 * node + 1] += element_vec[3 * j + 1];
-  //     global_vec[3 * node + 2] += element_vec[3 * j + 2];
-  //   }
-  // }
-
   void allocate() {
     // allocate global data on device
     cudaMalloc(&d_global_dof, sizeof(T) * ndof);
@@ -278,16 +280,12 @@ class Dynamics {
     // a. A0 = (Fext - Fint(U0))/M
     // Loop over all elements
 
-    // TODO: this is hard-coded for now because nodes_per_element = 10 and
-    // num_quadrature_pts = 5 and 64 > 50, need to properly determine this value
-    // to generalize the code
-    constexpr int threads_per_block = 64;
+    // Rounds up to the nearest multiple of 32
     constexpr int nodes_per_elem_num_quad =
         nodes_per_element * num_quadrature_pts;
+    constexpr int threads_per_block =
+        ((nodes_per_elem_num_quad + 31) / 32) * 32;
 
-    T *vel_i = new T[ndof];
-    T *global_mass = new T[ndof];
-    T *global_acc = new T[ndof];
     T time = 0.0;
     update<T, spatial_dim, nodes_per_element>
         <<<mesh->num_elements, threads_per_block>>>(

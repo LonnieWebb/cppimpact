@@ -41,116 +41,6 @@ void multiply_BT_node_P(const T *B_node, const T *P, T *BP_node) {
   }
 }
 
-#ifdef CPPIMPACT_CUDA_BACKEND
-template <typename T, const int nodes_per_element, const int dof_per_node,
-          const int spatial_dim>
-__global__ void energy_kernel(const int *element_nodes, const T *xloc,
-                              const T *dof, T *total_energy, T *C1, T *D1) {
-  using Analysis =
-      FEAnalysis<T, Basis, TetrahedralQuadrature5pts, NeohookeanPhysics<T>>;
-  int element_index = blockIdx.x;
-  int thread_index = threadIdx.x;
-  const int dof_per_element = dof_per_node * nodes_per_element;
-
-  __shared__ T elem_energy;
-  __shared__ T element_xloc[dof_per_element];
-  __shared__ T element_dof[dof_per_element];
-  elem_energy = 0.0;
-
-  // Get the element node locations
-  if (thread_index == 0) {
-    Analysis::get_element_dof<spatial_dim>(
-        &element_nodes[nodes_per_element * element_index], xloc, element_xloc);
-    // printf("test 3 \n");
-    // Get the element degrees of freedom
-
-    Analysis::get_element_dof<spatial_dim>(
-        &element_nodes[nodes_per_element * element_index], dof, element_dof);
-  }
-
-  T pt[spatial_dim];
-  T weight = TetrahedralQuadrature5pts::get_quadrature_pt<T>(thread_index, pt);
-
-  // Evaluate the derivative of the spatial dof in the computational
-  // coordinates
-  T J[spatial_dim * spatial_dim];
-  Basis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
-
-  // Evaluate the derivative of the dof in the computational coordinates
-  T grad[spatial_dim * spatial_dim];
-  Basis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
-  // Add the energy contributions
-  __syncthreads();
-  atomicAdd(&elem_energy, Physics::energy(weight, J, grad, *C1, *D1));
-  __syncthreads();
-  if (thread_index == 0) {
-    // printf("block %i, quad %i, energy %f, grad %f, element_dof %f  \n",
-    //        element_index, j, elem_energy, grad[0], element_dof[0]);
-    atomicAdd(total_energy, elem_energy);
-  }
-}
-
-template <typename T, const int nodes_per_element, const int dof_per_node,
-          const int spatial_dim>
-__global__ void residual_kernel(int element_nodes[], const T xloc[],
-                                const T dof[], T res[], T *C1, T *D1) {
-  using Analysis =
-      FEAnalysis<T, Basis, TetrahedralQuadrature5pts, NeohookeanPhysics<T>>;
-  const int dof_per_element = dof_per_node * nodes_per_element;
-
-  __shared__ T element_res[dof_per_element];
-  __shared__ T element_xloc[dof_per_element];
-  __shared__ T element_dof[dof_per_element];
-  int element_index = blockIdx.x;
-
-  // Parallel initialization of element_res
-  for (int i = threadIdx.x; i < dof_per_element; i += blockDim.x) {
-    element_res[i] = 0.0;
-  }
-
-  __syncthreads();
-
-  // Get the element node locations
-  if (threadIdx.x == 0) {
-    Analysis::get_element_dof<spatial_dim>(
-        &element_nodes[nodes_per_element * element_index], xloc, element_xloc);
-    // printf("test 3 \n");
-    // Get the element degrees of freedom
-
-    Analysis::get_element_dof<spatial_dim>(
-        &element_nodes[nodes_per_element * element_index], dof, element_dof);
-  }
-
-  __syncthreads();
-
-  T pt[spatial_dim];
-  T weight = TetrahedralQuadrature5pts::get_quadrature_pt<T>(threadIdx.x, pt);
-
-  // Evaluate the derivative of the spatial dof in the computational
-  // coordinates
-  T J[spatial_dim * spatial_dim];
-  Basis::eval_grad<T, spatial_dim>(pt, element_xloc, J);
-
-  // Evaluate the derivative of the dof in the computational coordinates
-  T grad[dof_per_node * spatial_dim];
-  Basis::eval_grad<T, dof_per_node>(pt, element_dof, grad);
-
-  // Evaluate the residuals at the quadrature points
-  T coef[dof_per_node * spatial_dim];
-  Physics::residual(weight, J, grad, coef, *C1, *D1);
-  __syncthreads();
-
-  // Add the contributions to the element residual
-  Basis::add_grad<T, dof_per_node>(pt, coef, element_res);
-
-  __syncthreads();
-  if (threadIdx.x == 0) {
-    Analysis::add_element_res<dof_per_node>(
-        &element_nodes[nodes_per_element * element_index], element_res, res);
-  }
-}
-#endif
-
 template <typename T, class Basis, class Quadrature, class Physics>
 class FEAnalysis {
  public:
@@ -193,6 +83,7 @@ class FEAnalysis {
   }
 #endif
 
+#ifdef CPPIMPACT_CUDA_BACKEND
   static __device__ void element_mass_matrix_gpu(
       int tid, const T element_density, const T *element_xloc,
       const T *element_dof, T *element_mass_matrix_diagonals,
@@ -231,7 +122,7 @@ class FEAnalysis {
     }
     __syncthreads();
 
-    if (tid < num_quadrature_pts * nodes_per_element) {
+    if (tid < nodes_per_elem_num_quad) {
       // Compute the invariants
       T N[nodes_per_element];
       Basis::eval_basis(pts + pts_offset, N);
@@ -244,6 +135,7 @@ class FEAnalysis {
       element_mass_matrix_diagonals[3 * i + k] = m_i[i];
     __syncthreads();
   }
+#endif
 
   static void element_mass_matrix(const T element_density,
                                   const T *element_xloc, const T *element_dof,
@@ -286,9 +178,14 @@ class FEAnalysis {
     __shared__ T pts[num_quadrature_pts * spatial_dim];
     __shared__ T dets[num_quadrature_pts];
     __shared__ T wts[num_quadrature_pts];
-    __shared__ T BTS[num_quadrature_pts * dof_per_element];
     __shared__ T J[num_quadrature_pts * spatial_dim * spatial_dim];
     __shared__ T Jinv[num_quadrature_pts * spatial_dim * spatial_dim];
+    __shared__ T Nxis[num_quadrature_pts][dof_per_element];
+    __shared__ T
+        B_matrix[num_quadrature_pts][6 * spatial_dim * nodes_per_element];
+    __shared__ T D_matrix[num_quadrature_pts][6 * 6];
+    __shared__ T B_T_D_B[num_quadrature_pts][dof_per_element * dof_per_element];
+    __shared__ T K_e[dof_per_element * dof_per_element];
 
     int constexpr spatial_dim_2 = spatial_dim * spatial_dim;
     int pts_offset = k * spatial_dim;
@@ -299,26 +196,19 @@ class FEAnalysis {
     }
     __syncthreads();
 
-    // // Evaluate the derivative of the spatial dof in the computational
-    // // coordinates
-    // Basis::template eval_grad<num_quadrature_pts, spatial_dim>(
-    //     tid, pts + pts_offset, element_xloc, J + J_offset);
-    // __syncthreads();
-
-    __shared__ T Nxis[num_quadrature_pts][dof_per_element];
-
     if (tid < num_quadrature_pts * nodes_per_element) {
       for (int j = 0; j < spatial_dim; j++) {
         Nxis[k][i + j * nodes_per_element] = 0.0;
       }
     }
+
     __syncthreads();
 
     for (int q = 0; q < num_quadrature_pts; q++) {
-      Basis::template eval_basis_grad_gpu_new<num_quadrature_pts,
-                                              dof_per_element>(tid, q, pts,
-                                                               Nxis);
+      Basis::template eval_basis_grad_gpu<num_quadrature_pts, dof_per_element>(
+          tid, pts + pts_offset, );
     }
+
     __syncthreads();
 
     // Evaluate the derivative of the spatial dof in the computational
@@ -328,8 +218,6 @@ class FEAnalysis {
     __syncthreads();
 
     if (tid < num_quadrature_pts * spatial_dim) {
-      int k = tid / spatial_dim;  // quad index
-      int i = tid % spatial_dim;  // 0 ~ 2
       if (i == 0) {
         dets[k] = 0.0;
       }
@@ -345,55 +233,32 @@ class FEAnalysis {
     }
     __syncthreads();
 
+    // TODO: parallelize more
     if (tid < num_quadrature_pts) {
-      T B_matrix[6 * dof_per_element];
-      memset(B_matrix, 0, 6 * dof_per_element * sizeof(T));
+      memset(B_matrix[tid], 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
+      Basis::calculate_B_matrix(Jinv, pt, B_matrix[tid]);
 
-      Basis::calculate_B_matrix(Jinv + J_offset, pts + pts_offset, B_matrix);
+      memset(D_matrix[tid], 0, 6 * 6 * sizeof(T));
+      Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix[tid]);
 
-      T D_matrix[6 * 6];
-      memset(D_matrix, 0, 6 * 6 * sizeof(T));
-      Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix);
-
-      T intermediate_1[6];
-      memset(intermediate_1, 0, 6 * sizeof(T));
-
-      // multiply B*u
-      cppimpact_gemv<T, MatOp::NoTrans>(6, 30, 1.0, B_matrix, element_dof, 0.0,
-                                        intermediate_1);
-
-      memset(sigma, 0, 6 * sizeof(T));
-      // multiply D*intermediate_1
-      cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix, intermediate_1,
-                                        0.0, sigma);
-
-      // T stress_vector[6];
-      // stress_vector[0] = sigma[0]; // sigma_xx
-      // stress_vector[1] = sigma[4]; // sigma_yy
-      // stress_vector[2] = sigma[8]; // sigma_zz
-      // stress_vector[3] = sigma[1]; // sigma_xy
-      // stress_vector[4] = sigma[5]; // sigma_yz
-      // stress_vector[5] = sigma[2]; // sigma_xz
-
-      int offset = tid * dof_per_element;
-      memset(BTS + offset, 0, sizeof(T) * dof_per_element);
-
-      // multiply B^T by S
-      cppimpact_gemv<T, MatOp::Trans>(6, 30, 1.0, B_matrix, sigma, 0.0,
-                                      BTS + offset);
+      memset(B_T_D_B[tid], 0, sizeof(T) * dof_per_element * dof_per_element);
+      calculate_B_T_D_B(B_matrix, D_matrix, B_T_D_B[tid]);
     }
 
     __syncthreads();
-
-    if (tid < num_quadrature_pts * nodes_per_element) {
-      int i = tid / num_quadrature_pts;  // node index
-      int k = tid % num_quadrature_pts;  // quadrature index
-      int offset = k * dof_per_element;
-      for (int d = 0; d < spatial_dim; d++) {
-        atomicAdd(&f_internal[spatial_dim * i + d],
-                  wts[k] * dets[k] * BTS[offset + spatial_dim * i + d]);
+    if (tid < num_quadrature_pts) {
+      for (int j = 0; j < dof_per_element * dof_per_element; j++) {
+        K_e[j] += wts[tid] * dets[tid] * B_T_D_B[j];
       }
     }
+    __syncthreads();
+
+    // TODO: parallelize
+    if (tid == 0) {
+      cppimpact_gemv<T, MatOp::NoTrans>(dof_per_element, dof_per_element, 1.0,
+                                        K_e, element_dof, 0.0, f_internal);
+    }
+    __syncthreads();
   }
 
   static void calculate_B_T_D_B(const T *B_matrix, const T *D_matrix,
@@ -436,11 +301,13 @@ class FEAnalysis {
       // Evaluate the derivative of the spatial dof in the computational
       // coordinates
       T J[spatial_dim * spatial_dim];
+      memset(J, 0, spatial_dim * spatial_dim * sizeof(T));
       Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
       // standard basis here
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
+      memset(Jinv, 0, spatial_dim * spatial_dim * sizeof(T));
       T detJ = inv3x3(J, Jinv);
 
 #ifdef CPPIMPACT_DEBUG_MODE
@@ -451,6 +318,15 @@ class FEAnalysis {
 
       // Compute the B matrix
       // PU used here
+
+      T J_PU[spatial_dim * spatial_dim];
+      memset(J_PU, 0, spatial_dim * spatial_dim * sizeof(T));
+      Basis::template eval_grad_PU<spatial_dim>(pt, element_xloc, J_PU);
+
+      T Jinv_PU[spatial_dim * spatial_dim];
+      memset(Jinv_PU, 0, spatial_dim * spatial_dim * sizeof(T));
+      T detJ_PU = inv3x3(J_PU, Jinv_PU);
+
       T B_matrix[6 * spatial_dim * nodes_per_element];
       memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
       Basis::calculate_B_matrix(Jinv, pt, B_matrix);
@@ -489,10 +365,12 @@ class FEAnalysis {
       // Evaluate the derivative of the spatial dof in the computational
       // coordinates
       T J[spatial_dim * spatial_dim];
+      memset(J, 0, spatial_dim * spatial_dim * sizeof(T));
       Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
       // Compute the inverse and determinant of the Jacobian matrix
       T Jinv[spatial_dim * spatial_dim];
+      memset(Jinv, 0, spatial_dim * spatial_dim * sizeof(T));
       T detJ = inv3x3(J, Jinv);
 
 #ifdef CPPIMPACT_DEBUG_MODE
@@ -500,6 +378,14 @@ class FEAnalysis {
         printf("detJ negative\n");
       }
 #endif
+
+      T J_PU[spatial_dim * spatial_dim];
+      memset(J_PU, 0, spatial_dim * spatial_dim * sizeof(T));
+      Basis::template eval_grad_PU<spatial_dim>(pt, element_xloc, J_PU);
+
+      T Jinv_PU[spatial_dim * spatial_dim];
+      memset(Jinv_PU, 0, spatial_dim * spatial_dim * sizeof(T));
+      T detJ_PU = inv3x3(J_PU, Jinv);
 
       // Compute the B matrix
       T B_matrix[6 * spatial_dim * nodes_per_element];
@@ -520,7 +406,6 @@ class FEAnalysis {
       for (int j = 0; j < dof_per_element * dof_per_element; j++) {
         K_e[j] += weight * detJ * B_T_D_B[j];
       }
-      volume += weight * detJ;
     }
 
     // Print K_e as a matrix
@@ -580,10 +465,18 @@ class FEAnalysis {
     T Jinv[spatial_dim * spatial_dim];
     T detJ = inv3x3(J, Jinv);
 
+    T J_PU[spatial_dim * spatial_dim];
+    memset(J_PU, 0, spatial_dim * spatial_dim * sizeof(T));
+    Basis::template eval_grad_PU<spatial_dim>(pt, element_xloc, J_PU);
+
+    T Jinv_PU[spatial_dim * spatial_dim];
+    memset(Jinv_PU, 0, spatial_dim * spatial_dim * sizeof(T));
+    T detJ_PU = inv3x3(J_PU, Jinv_PU);
+
     // Compute the B matrix
     T B_matrix[6 * spatial_dim * nodes_per_element];
     memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
-    Basis::calculate_B_matrix(Jinv, pt, B_matrix);
+    Basis::calculate_B_matrix(Jinv_PU, pt, B_matrix);
 
     // multiply B*u
     cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0, B_matrix,

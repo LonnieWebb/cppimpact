@@ -7,8 +7,8 @@
 #include "include/analysis.h"
 #include "include/cppimpact_defs.h"
 #include "include/elastoplastic.h"
-#include "include/mesh.h"
 #include "include/physics.h"
+#include "include/simulation_config.h"
 #include "include/tetrahedral.h"
 #include "include/wall.h"
 
@@ -130,6 +130,10 @@ int main(int argc, char* argv[]) {
                       tensile.num_slave_nodes, normal);
 
   Dynamics<T, Basis, Analysis, Quadrature> dyna(&tensile, &material, &w);
+  // T init_position[] = {-9.99E-2, -9.99E-2, 1.501E-1};
+  // // T init_position[] = {0, 0, 0};
+  // T init_velocity[] = {0, 0.0, -1};
+  // dyna.initialize(init_position, init_velocity);
 
   // Solve loop with total timer
   auto start = std::chrono::high_resolution_clock::now();

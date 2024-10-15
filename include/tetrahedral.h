@@ -52,22 +52,22 @@ class TetrahedralQuadrature4pts {
       pt[0] = beta;
       pt[1] = beta;
       pt[2] = beta;
-      return 0.25;
+      return 0.041666667;
     } else if (k == 1) {
       pt[0] = alpha;
       pt[1] = beta;
       pt[2] = beta;
-      return 0.25;
+      return 0.041666667;
     } else if (k == 2) {
       pt[0] = beta;
       pt[1] = alpha;
       pt[2] = beta;
-      return 0.25;
+      return 0.041666667;
     } else if (k == 3) {
       pt[0] = beta;
       pt[1] = beta;
       pt[2] = alpha;
-      return 0.25;
+      return 0.041666667;
     }
     return 0.0;
   }
@@ -518,6 +518,18 @@ class TetrahedralBasisLinear {
   static constexpr int spatial_dim = 3;
   static constexpr int nodes_per_element = 4;
 
+  static CPPIMPACT_FUNCTION void eval_basis(const T pt[], T N[]) {
+    // N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
+    // N[1] = pt[0];                        // 3 from paper
+    // N[2] = pt[1];                        // 1 from paper
+    // N[3] = pt[2];                        // 4 from paper
+
+    N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
+    N[1] = pt[0];                        // 3 from paper
+    N[2] = pt[1];
+    N[3] = pt[2];  // 4 from paper
+  }
+
   static CPPIMPACT_FUNCTION void eval_basis_grad(const T pt[], T Nxi[]) {
     Nxi[0] = -1.0;
     Nxi[1] = -1.0;
@@ -554,6 +566,18 @@ class TetrahedralBasisLinear {
     }
   }
 
+  // Linear tet only has one set of shape functions
+  static CPPIMPACT_FUNCTION void eval_basis_PU(const T pt[], T N[]) {
+    eval_basis(pt, N);
+  }
+
+  // Linear tet only has one set of shape functions
+  template <int dim>
+  static CPPIMPACT_FUNCTION void eval_grad_PU(const T pt[], const T xloc[],
+                                              T grad[]) {
+    eval_grad<dim>(pt, xloc, grad);
+  }
+
   template <int dim>
   static CPPIMPACT_FUNCTION void add_grad(const T pt[], const T coef[],
                                           T res[]) {
@@ -568,18 +592,6 @@ class TetrahedralBasisLinear {
             coef[spatial_dim * k + 2] * Nxi[spatial_dim * i + 2];
       }
     }
-  }
-
-  static CPPIMPACT_FUNCTION void eval_basis(const T pt[], T N[]) {
-    // N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
-    // N[1] = pt[0];                        // 3 from paper
-    // N[2] = pt[1];                        // 1 from paper
-    // N[3] = pt[2];                        // 4 from paper
-
-    N[0] = 1.0 - pt[0] - pt[1] - pt[2];  // 2 from paper
-    N[1] = pt[0];                        // 3 from paper
-    N[2] = pt[1];
-    N[3] = pt[2];  // 4 from paper
   }
 
   static CPPIMPACT_FUNCTION void calculate_B_matrix(const T Jinv[], const T* pt,
@@ -642,5 +654,60 @@ class TetrahedralBasisLinear {
       D_matrix[i] *=
           material->E / ((1 + material->nu) * (1 - 2 * material->nu));
     }
-  };
+  }
+
+  template <int num_quadrature_pts, int dim>
+  static __device__ void eval_basis_grad_gpu(int tid, T Nxis[]) {
+    const int nodes_per_elem_num_quad = nodes_per_element * num_quadrature_pts;
+    int k = tid % num_quadrature_pts;  // quadrature index
+
+    if (tid < nodes_per_elem_num_quad) {
+      Nxis[k][tid] = -1.0;
+      Nxis[k][tid] = -1.0;
+      Nxis[k][tid] = -1.0;
+
+      Nxis[k][tid] = 1.0;
+      Nxis[k][tid] = 0.0;
+      Nxis[k][tid] = 0.0;
+
+      Nxis[k][tid] = 0.0;
+      Nxis[k][tid] = 1.0;
+      Nxis[k][tid] = 0.0;
+
+      Nxis[k][tid] = 0.0;
+      Nxis[k][tid] = 0.0;
+      Nxis[k][tid] = 1.0;
+    }
+  }
+
+  template <int num_quadrature_pts, int dim>
+  static __device__ void eval_grad_gpu(int tid, const T pt[], const T dof[],
+                                       T grad[], T Nxi[]) {
+    const int nodes_per_elem_num_quad = nodes_per_element * num_quadrature_pts;
+
+    if (tid < spatial_dim * dim * num_quadrature_pts) {
+      grad[tid] = 0.0;
+    }
+    // if (tid < num_quadrature_pts) {
+    //   for (int k = 0; k < spatial_dim * dim; k++) {
+    //     grad[k] = 0.0;
+    //   }
+    // }
+    __syncthreads();
+
+    if (tid < nodes_per_elem_num_quad) {
+      int i = tid / num_quadrature_pts;  // node index
+      int q = tid % num_quadrature_pts;  // quad index
+      int grad_offset = spatial_dim * dim * q;
+      if (i < nodes_per_element) {
+        for (int k = 0; k < dim; k++) {
+          // clang-format off
+          atomicAdd(&grad[grad_offset + spatial_dim * k],     Nxi[spatial_dim * i] *     dof[dim * i + k]);
+          atomicAdd(&grad[grad_offset + spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
+          atomicAdd(&grad[grad_offset + spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
+          // clang-format on
+        }
+      }
+    }
+  }
 };

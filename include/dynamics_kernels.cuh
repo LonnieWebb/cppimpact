@@ -3,6 +3,7 @@
 #include "analysis.h"
 #include "basematerial.h"
 #include "physics.h"
+#include "simulation_config.h"
 #include "tetrahedral.h"
 #include "wall.h"
 
@@ -15,10 +16,10 @@ __global__ void update(int num_elements, T dt,
                        const T *d_global_xloc, const T *d_global_dof,
                        T *d_global_acc, T *d_global_mass,
                        const int nodes_per_elem_num_quad, T time) {
-  using Basis = TetrahedralBasisQuadratic<T>;
-  using Quadrature = TetrahedralQuadrature5pts;
-  using Physics = NeohookeanPhysics<T>;
-  using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
+  // using Basis = TetrahedralBasisQuadratic<T>;
+  // using Quadrature = TetrahedralQuadrature5pts;
+  // using Physics = NeohookeanPhysics<T>;
+  // using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
