@@ -366,6 +366,7 @@ class Dynamics {
     }
 
     array_to_txt<T>("cpu_vel.txt", vel, ndof);
+    array_to_txt<T>("cpu_xloc.txt", global_xloc, ndof);
 
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------

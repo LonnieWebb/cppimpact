@@ -73,12 +73,12 @@ int main(int argc, char *argv[]) {
   const int normal = 1;
   std::string wall_name = "Wall";
   T location = -0.00005;
-  double dt = 1e-6;
-  double time_end = smoke_test ? dt * 5 : 0.5;
+  double dt = 1e-7;
+  double time_end = smoke_test ? dt * 10000 : 0.5;
 
   int export_interval = INT_MAX;
 #ifdef CPPIMPACT_DEBUG_MODE
-  export_interval = 5;
+  export_interval = 10;
 #endif
 
   Wall<T, 2, Basis> w(wall_name, location, E * 10, tensile.slave_nodes,
