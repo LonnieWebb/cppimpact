@@ -656,56 +656,51 @@ class TetrahedralBasisLinear {
     }
   }
 
-  template <int num_quadrature_pts, int dim>
-  static __device__ void eval_basis_grad_gpu(int tid, T Nxis[]) {
-    const int nodes_per_elem_num_quad = nodes_per_element * num_quadrature_pts;
-    int k = tid % num_quadrature_pts;  // quadrature index
-
-    if (tid < nodes_per_elem_num_quad) {
-      Nxis[k][tid] = -1.0;
-      Nxis[k][tid] = -1.0;
-      Nxis[k][tid] = -1.0;
-
-      Nxis[k][tid] = 1.0;
-      Nxis[k][tid] = 0.0;
-      Nxis[k][tid] = 0.0;
-
-      Nxis[k][tid] = 0.0;
-      Nxis[k][tid] = 1.0;
-      Nxis[k][tid] = 0.0;
-
-      Nxis[k][tid] = 0.0;
-      Nxis[k][tid] = 0.0;
-      Nxis[k][tid] = 1.0;
+  // TODO: standardize the interface for this function
+  template <int num_quadrature_pts, int dof_per_element>
+  static __device__ void eval_basis_grad_gpu(
+      int tid, const T pts[], T Nxis[num_quadrature_pts][dof_per_element]) {
+    // Assign gradients based on linear shape functions
+    switch (tid) {
+      case 0:                         // Node 1: N = 1 - x - y - z
+        Nxis[tid][0 * 3 + 0] = -1.0;  // dN1/dx
+        Nxis[tid][0 * 3 + 1] = -1.0;  // dN1/dy
+        Nxis[tid][0 * 3 + 2] = -1.0;  // dN1/dz
+        break;
+      case 1:                        // Node 2: N = x
+        Nxis[tid][1 * 3 + 0] = 1.0;  // dN2/dx
+        Nxis[tid][1 * 3 + 1] = 0.0;  // dN2/dy
+        Nxis[tid][1 * 3 + 2] = 0.0;  // dN2/dz
+        break;
+      case 2:                        // Node 3: N = y
+        Nxis[tid][2 * 3 + 0] = 0.0;  // dN3/dx
+        Nxis[tid][2 * 3 + 1] = 1.0;  // dN3/dy
+        Nxis[tid][2 * 3 + 2] = 0.0;  // dN3/dz
+        break;
+      case 3:                        // Node 4: N = z
+        Nxis[tid][3 * 3 + 0] = 0.0;  // dN4/dx
+        Nxis[tid][3 * 3 + 1] = 0.0;  // dN4/dy
+        Nxis[tid][3 * 3 + 2] = 1.0;  // dN4/dz
+        break;
+      default:
+        break;
     }
   }
 
   template <int num_quadrature_pts, int dim>
-  static __device__ void eval_grad_gpu(int tid, const T pt[], const T dof[],
-                                       T grad[], T Nxi[]) {
-    const int nodes_per_elem_num_quad = nodes_per_element * num_quadrature_pts;
+  static __device__ void eval_grad_gpu(int tid, const T pt[], const T xloc[],
+                                       T grad[]) {
+    T Nxi[spatial_dim * nodes_per_element];
+    eval_basis_grad(pt, Nxi);
 
-    if (tid < spatial_dim * dim * num_quadrature_pts) {
-      grad[tid] = 0.0;
-    }
-    // if (tid < num_quadrature_pts) {
-    //   for (int k = 0; k < spatial_dim * dim; k++) {
-    //     grad[k] = 0.0;
-    //   }
-    // }
-    __syncthreads();
+    // Initialize grad (Jacobian matrix) to zero
+    memset(grad, 0, spatial_dim * dim * sizeof(T));
 
-    if (tid < nodes_per_elem_num_quad) {
-      int i = tid / num_quadrature_pts;  // node index
-      int q = tid % num_quadrature_pts;  // quad index
-      int grad_offset = spatial_dim * dim * q;
-      if (i < nodes_per_element) {
-        for (int k = 0; k < dim; k++) {
-          // clang-format off
-          atomicAdd(&grad[grad_offset + spatial_dim * k],     Nxi[spatial_dim * i] *     dof[dim * i + k]);
-          atomicAdd(&grad[grad_offset + spatial_dim * k + 1], Nxi[spatial_dim * i + 1] * dof[dim * i + k]);
-          atomicAdd(&grad[grad_offset + spatial_dim * k + 2], Nxi[spatial_dim * i + 2] * dof[dim * i + k]);
-          // clang-format on
+    for (int p = 0; p < dim; p++) {
+      for (int q = 0; q < dim; q++) {
+        for (int i = 0; i < nodes_per_element; i++) {
+          atomicAdd(&grad[p * dim + q],
+                    Nxi[spatial_dim * i + q] * xloc[dim * i + p]);
         }
       }
     }

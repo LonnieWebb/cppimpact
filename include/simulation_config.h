@@ -1,10 +1,13 @@
 #pragma once
 
-#include "analysis.h"
 #include "cppimpact_defs.h"
 #include "elastoplastic.h"
 #include "physics.h"
 #include "tetrahedral.h"
+
+// Forward declaration of the FEAnalysis template
+template <typename T, class Basis, class Quadrature, class Physics>
+class FEAnalysis;
 
 // Define the scalar type
 using T = double;

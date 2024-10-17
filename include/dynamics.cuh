@@ -287,11 +287,11 @@ class Dynamics {
         ((nodes_per_elem_num_quad + 31) / 32) * 32;
 
     T time = 0.0;
-    update<T, spatial_dim, nodes_per_element>
-        <<<mesh->num_elements, threads_per_block>>>(
-            mesh->num_elements, dt, d_material, d_wall, d_element_nodes, d_vel,
-            d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
-            nodes_per_elem_num_quad, time);
+    // update<T, spatial_dim, nodes_per_element>
+    //     <<<mesh->num_elements, threads_per_block>>>(
+    //         mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
+    //         d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
+    //         nodes_per_elem_num_quad, time);
 
     // Do we need this?
     cudaDeviceSynchronize();

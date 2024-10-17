@@ -4,11 +4,14 @@
 #include <cstdlib>
 #include <string>
 
+// clang-format off
+#include "include/simulation_config.h"
 #include "include/analysis.h"
+// clang-format on
+
 #include "include/cppimpact_defs.h"
 #include "include/elastoplastic.h"
 #include "include/physics.h"
-#include "include/simulation_config.h"
 #include "include/tetrahedral.h"
 #include "include/wall.h"
 
@@ -45,24 +48,6 @@ int main(int argc, char* argv[]) {
   if (argc >= 3) {
     deformation = std::atoi(argv[2]);
   }
-
-#ifdef CPPIMPACT_CUDA_BACKEND
-  using T = double;
-#else
-  using T = double;
-#endif
-
-#if defined(USE_LINEAR_BASIS)
-  using Basis = TetrahedralBasisLinear<T>;
-#elif defined(USE_QUADRATIC_BASIS)
-  using Basis = TetrahedralBasisQuadratic<T>;
-#else
-#error "No basis type defined"
-#endif
-
-  using Quadrature = TetrahedralQuadrature5pts;
-  using Physics = NeohookeanPhysics<T>;
-  using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
   constexpr int dof_per_node = 3;
 
