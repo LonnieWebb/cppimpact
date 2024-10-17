@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
   std::string wall_name = "Wall";
   T location = -0.00005;
   double dt = 1e-6;
-  double time_end = smoke_test ? dt * 1 : 0.5;
+  double time_end = smoke_test ? dt * 5 : 0.5;
 
   int export_interval = INT_MAX;
 #ifdef CPPIMPACT_DEBUG_MODE

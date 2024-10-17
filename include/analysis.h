@@ -164,7 +164,6 @@ class FEAnalysis {
   static __device__ void calculate_f_internal_gpu(
       int tid, const T *element_xloc, const T *element_dof, T *f_internal,
       BaseMaterial<T, dof_per_node> *material) {
-    T sigma[6];
     int constexpr dof_per_element = spatial_dim * nodes_per_element;
     int i = tid / num_quadrature_pts;  // node index
     int k = tid % num_quadrature_pts;  // quadrature index
@@ -181,6 +180,24 @@ class FEAnalysis {
     __shared__ T B_T_D_B[num_quadrature_pts][dof_per_element * dof_per_element];
     __shared__ T K_e[dof_per_element * dof_per_element];
 
+    if (tid == 0) {
+      memset(pts, 0, num_quadrature_pts * spatial_dim * sizeof(T));
+      memset(dets, 0, num_quadrature_pts * sizeof(T));
+      memset(wts, 0, num_quadrature_pts * sizeof(T));
+      memset(J, 0, num_quadrature_pts * spatial_dim * spatial_dim * sizeof(T));
+      memset(Jinv, 0,
+             num_quadrature_pts * spatial_dim * spatial_dim * sizeof(T));
+      memset(K_e, 0, sizeof(T) * dof_per_element * dof_per_element);
+    }
+
+    if (tid < num_quadrature_pts) {
+      memset(Nxis[tid], 0, dof_per_element * sizeof(T));
+      memset(B_matrix[tid], 0, 6 * dof_per_element * sizeof(T));
+      memset(D_matrix[tid], 0, 6 * 6 * sizeof(T));
+      memset(B_T_D_B[tid], 0, sizeof(T) * dof_per_element * dof_per_element);
+    }
+    __syncthreads();
+
     int constexpr spatial_dim_2 = spatial_dim * spatial_dim;
     int pts_offset = k * spatial_dim;
     int J_offset = k * spatial_dim_2;
@@ -191,28 +208,6 @@ class FEAnalysis {
     }
     __syncthreads();
 
-    if (tid < num_quadrature_pts * nodes_per_element) {
-      for (int j = 0; j < spatial_dim; j++) {
-        Nxis[k][i + j * nodes_per_element] = 0.0;
-      }
-    }
-
-    __syncthreads();
-
-    if (tid < num_quadrature_pts) {
-      Basis::template eval_basis_grad_gpu<num_quadrature_pts, dof_per_element>(
-          tid, pts, Nxis);
-    }
-
-    __syncthreads();
-
-    // Evaluate the derivative of the spatial dof in the computational
-    // coordinates
-    if (tid < num_quadrature_pts) {
-      memset(J + J_offset, 0, spatial_dim_2 * sizeof(T));
-    }
-
-    __syncthreads();
     if (tid < num_quadrature_pts) {
       Basis::template eval_grad_gpu<num_quadrature_pts, spatial_dim>(
           tid, pts + pts_offset, element_xloc, J + J_offset);
@@ -220,10 +215,30 @@ class FEAnalysis {
 
     __syncthreads();
 
+    // Evaluate the derivative of the spatial dof in the computational
+    // coordinates
+
     if (tid < num_quadrature_pts) {
       int J_offset = tid * spatial_dim_2;
       dets[tid] = det3x3_simple(J + J_offset);
     }
+    __syncthreads();
+
+    if (tid == 0) {
+      // printf("J = [%f, %f, %f, %f, %f, %f, %f, %f, %f], det = %f\n",
+      //        J[0 + 1 * spatial_dim_2], J[1 + 1 * spatial_dim_2],
+      //        J[2 + 1 * spatial_dim_2], J[3 + 1 * spatial_dim_2],
+      //        J[4 + 1 * spatial_dim_2], J[5 + 1 * spatial_dim_2],
+      //        J[6 + 1 * spatial_dim_2], J[7 + J_offset], J[8 + J_offset],
+      //        dets[1]);
+
+      for (int detnum = 0; detnum < 5; detnum++) {
+        if (dets[detnum] <= 0) {
+          printf("det[%d] = %f\n", detnum, dets[detnum]);
+        }
+      }
+    }
+
     __syncthreads();
 
     if (tid < num_quadrature_pts * spatial_dim_2) {
@@ -236,23 +251,35 @@ class FEAnalysis {
 
     // TODO: parallelize more
     if (tid < num_quadrature_pts) {
-      memset(B_matrix[tid], 0, 6 * dof_per_element * sizeof(T));
       Basis::calculate_B_matrix(Jinv + J_offset, pts + pts_offset,
                                 B_matrix[tid]);
+    }
+    __syncthreads();
 
-      memset(D_matrix[tid], 0, 6 * 6 * sizeof(T));
+    if (tid < num_quadrature_pts) {
       Basis::template calculate_D_matrix<dof_per_node>(material, D_matrix[tid]);
+    }
 
-      memset(B_T_D_B[tid], 0, sizeof(T) * dof_per_element * dof_per_element);
+    __syncthreads();
+    if (tid < num_quadrature_pts) {
       calculate_B_T_D_B(B_matrix[tid], D_matrix[tid], B_T_D_B[tid]);
     }
 
     __syncthreads();
+
     if (tid < num_quadrature_pts) {
       for (int j = 0; j < dof_per_element * dof_per_element; j++) {
         atomicAdd(&K_e[j], wts[tid] * dets[tid] * B_T_D_B[tid][j]);
       }
     }
+    __syncthreads();
+
+    if (tid == 0) {
+      for (int mkmk = 0; mkmk < 12; mkmk++) {
+        // printf("B_T_D_B = %f\n", element_xloc[mkmk]);
+      }
+    }
+
     __syncthreads();
 
     // TODO: parallelize
