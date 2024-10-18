@@ -82,8 +82,7 @@ class Dynamics {
     }
   }
 
-  void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i,
-                     T *global_xloc) {
+  void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i) {
     const std::string directory = "../gpu_output";
     const std::string filename =
         directory + "/simulation_" + std::to_string(timestep) + ".vtk";
@@ -98,7 +97,7 @@ class Dynamics {
     vtkFile << "FEA simulation data\n";
     vtkFile << "ASCII\n";
     vtkFile << "DATASET UNSTRUCTURED_GRID\n";
-    const double threshold = 1e6;
+    const double threshold = 1e15;
 
     vtkFile << "POINTS " << mesh->num_nodes << " float\n";
     for (int i = 0; i < mesh->num_nodes; ++i) {
@@ -161,6 +160,22 @@ class Dynamics {
         }
         vtkFile << value << (j < 2 ? " " : "\n");
       }
+    }
+
+    // First part of the strain
+    vtkFile << "VECTORS strain1 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_strains[6 * i + 0] << " "    // First component (e_xx)
+              << global_strains[6 * i + 1] << " "    // Second component (e_yy)
+              << global_strains[6 * i + 2] << "\n";  // Third component (e_zz)
+    }
+
+    // Second part of the strain
+    vtkFile << "VECTORS strain2 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_strains[6 * i + 3] << " "    // Fourth component (e_xy)
+              << global_strains[6 * i + 4] << " "    // Fifth component (e_xz)
+              << global_strains[6 * i + 5] << "\n";  // Sixth component (e_yz)
     }
 
     vtkFile << "VECTORS acceleration double\n";
@@ -398,7 +413,8 @@ class Dynamics {
         cudaStreamSynchronize(streams[1]);
         cudaStreamSynchronize(streams[2]);
         cudaStreamSynchronize(streams[3]);
-        export_to_vtk(timestep, vel_i, global_acc, global_mass, global_xloc);
+        // TODO: add support for strain output
+        export_to_vtk(timestep, vel_i, global_acc, global_mass);
       };
 
       time += dt;

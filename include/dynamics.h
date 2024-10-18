@@ -30,6 +30,7 @@ class Dynamics {
   T *global_xloc;
   T *vel;
   T *global_strains;
+  T *global_stress;
   T *global_dof;
   T *global_acc;
   T *global_mass;
@@ -48,6 +49,7 @@ class Dynamics {
             new T[mesh->num_nodes *
                   dof_per_node]),  // Allocate memory for global_xloc here
         global_strains(new T[mesh->num_nodes * 6]),
+        global_stress(new T[mesh->num_nodes * 6]),
         global_dof(new T[mesh->num_nodes * dof_per_node]),
         global_acc(new T[mesh->num_nodes * dof_per_node]),
         global_mass(new T[mesh->num_nodes * dof_per_node]),
@@ -60,6 +62,7 @@ class Dynamics {
     delete[] vel;
     delete[] global_xloc;
     delete[] global_strains;
+    delete[] global_stress;
     delete[] global_dof;
     delete[] global_acc;
     delete[] global_mass;
@@ -178,6 +181,24 @@ class Dynamics {
               << global_strains[6 * i + 5] << "\n";  // Sixth component (e_yz)
     }
 
+    // First part of the stress
+    vtkFile << "VECTORS stress1 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_stress[6 * i + 0] << " "  // First component (sigma_xx)
+              << global_stress[6 * i + 1] << " "  // Second component (sigma_yy)
+              << global_stress[6 * i + 2]
+              << "\n";  // Third component (sigma_zz)
+    }
+
+    // Second part of the stress
+    vtkFile << "VECTORS stress2 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_stress[6 * i + 3] << " "  // Fourth component (sigma_xy)
+              << global_stress[6 * i + 4] << " "  // Fifth component (sigma_xz)
+              << global_stress[6 * i + 5]
+              << "\n";  // Sixth component (sigma_yz)
+    }
+
     vtkFile << "VECTORS acceleration double\n";
     for (int i = 0; i < mesh->num_nodes; ++i) {
       for (int j = 0; j < 3; ++j) {
@@ -246,6 +267,7 @@ class Dynamics {
     memset(global_acc, 0, sizeof(T) * ndof);
     memset(global_mass, 0, sizeof(T) * ndof);
     memset(global_strains, 0, sizeof(T) * 6 * mesh->num_nodes);
+    memset(global_stress, 0, sizeof(T) * 6 * mesh->num_nodes);
 
     constexpr int dof_per_element = spatial_dim * nodes_per_element;
     // Allocate element quantities
@@ -255,8 +277,9 @@ class Dynamics {
 
     T total_energy = 0.0;
     T total_volume = 0.0;
-    T *node_coords = new T[spatial_dim];
-    T *element_strains = new T[6];
+    T node_coords[spatial_dim];
+    T element_strains[6];
+    T element_stress[6];
 
     for (int i = 0; i < mesh->num_elements; i++) {
       memset(node_coords, 0, sizeof(T) * spatial_dim);
@@ -289,11 +312,13 @@ class Dynamics {
         for (int k = 0; k < spatial_dim; k++) {
           node_coords[k] = element_xloc[node * spatial_dim + k];
         }
-        Analysis::calculate_strain(element_xloc.data(), element_dof.data(),
-                                   node_coords, element_strains, material);
+        Analysis::calculate_stress_strain(
+            element_xloc.data(), element_dof.data(), node_coords,
+            element_strains, element_stress, material);
         int node_idx = this_element_nodes[node];
         for (int k = 0; k < 6; k++) {
           global_strains[node_idx * 6 + k] = element_strains[k];
+          global_stress[node_idx * 6 + k] = element_stress[k];
           // #ifdef
           // printf("Node %d, Strain %d: %f\n", node_idx, k,
           // element_strains[k]); #endif
@@ -357,7 +382,7 @@ class Dynamics {
     update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
         mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall, mesh,
         element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
-        global_strains, time);
+        global_strains, global_stress, time);
 
     // b.Stagger V0 .5 = V0 + dt / 2 * a0
     // Update velocity
@@ -386,7 +411,7 @@ class Dynamics {
       update<T, spatial_dim, nodes_per_element, Basis, Analysis>(
           mesh->num_nodes, mesh->num_elements, ndof, dt, material, wall, mesh,
           element_nodes, vel, global_xloc, global_dof, global_acc, global_mass,
-          global_strains, time);
+          global_strains, global_stress, time);
 
       // Compute total mass (useful?)
       T total_mass = 0.0;

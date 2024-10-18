@@ -476,9 +476,10 @@ class FEAnalysis {
     return volume;
   }
 
-  static void calculate_strain(const T *element_xloc, const T *element_dof,
-                               const T *pt, T *strain,
-                               BaseMaterial<T, dof_per_node> *material) {
+  static void calculate_stress_strain(const T *element_xloc,
+                                      const T *element_dof, const T *pt,
+                                      T *strain, T *stress,
+                                      BaseMaterial<T, dof_per_node> *material) {
     T J[spatial_dim * spatial_dim];
     Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
@@ -502,6 +503,12 @@ class FEAnalysis {
     // multiply B*u
     cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0, B_matrix,
                                       element_dof, 0.0, strain);
+
+    T D_matrix[6 * 6];
+    memset(D_matrix, 0, 6 * 6 * sizeof(T));
+    Basis::calculate_D_matrix(material, D_matrix);
+
+    cppimpact_gemv<T, MatOp::NoTrans>(6, 6, 1.0, D_matrix, strain, 0.0, stress);
   }
 };
 

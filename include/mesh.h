@@ -299,6 +299,7 @@ class Mesh {
     }
   }
 
+  // TODO: Handle files without a slave nodeset
   void collect_slave_nodes() {
     num_slave_nodes = 0;
     slave_nodes = nullptr;

@@ -11,7 +11,8 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
             BaseMaterial<T, spatial_dim> *material, Wall<T, 2, Basis> *wall,
             Mesh<T, nodes_per_element> *mesh, const int *element_nodes,
             const T *vel, const T *global_xloc, const T *global_dof,
-            T *global_acc, T *global_mass, T *global_strains, T time) {
+            T *global_acc, T *global_mass, T *global_strains, T *global_stress,
+            T time) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
   // Zero-out states
@@ -26,6 +27,7 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
   std::vector<T> element_internal_forces(dof_per_element);
   std::vector<T> element_original_xloc(dof_per_element);
   std::vector<T> element_strains(6);  // hardcoded for 3d
+  std::vector<T> element_stress(6);   // hardcoded for 3d
   std::vector<T> element_total_dof(dof_per_element);
   std::vector<int> this_element_nodes(nodes_per_element);
 
@@ -78,6 +80,7 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
     memset(element_acc.data(), 0, sizeof(T) * dof_per_element);
     memset(element_internal_forces.data(), 0, sizeof(T) * dof_per_element);
     memset(element_strains.data(), 0, sizeof(T) * 6);
+    memset(element_stress.data(), 0, sizeof(T) * 6);
     memset(element_total_dof.data(), 0, sizeof(T) * dof_per_element);
     memset(element_original_xloc.data(), 0, sizeof(T) * dof_per_element);
 
@@ -122,8 +125,9 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
 
     // Currently set up for linear element only
     T pt[3] = {0.0, 0.0, 0.0};
-    Analysis::calculate_strain(element_xloc.data(), element_total_dof.data(),
-                               pt, element_strains.data(), material);
+    Analysis::calculate_stress_strain(
+        element_xloc.data(), element_total_dof.data(), pt,
+        element_strains.data(), element_stress.data(), material);
 
     // assemble global acceleration
     for (int j = 0; j < nodes_per_element; j++) {
@@ -136,12 +140,10 @@ void update(int num_nodes, int num_elements, int ndof, T dt,
 
     // assemble global strains
     for (int j = 0; j < nodes_per_element; j++) {
-      global_strains[6 * this_element_nodes[j]] = element_strains[0];
-      global_strains[6 * this_element_nodes[j] + 1] = element_strains[1];
-      global_strains[6 * this_element_nodes[j] + 2] = element_strains[2];
-      global_strains[6 * this_element_nodes[j] + 3] = element_strains[3];
-      global_strains[6 * this_element_nodes[j] + 4] = element_strains[4];
-      global_strains[6 * this_element_nodes[j] + 5] = element_strains[5];
+      for (int k = 0; k < 6; k++) {
+        global_strains[6 * this_element_nodes[j] + k] = element_strains[k];
+        global_stress[6 * this_element_nodes[j] + k] = element_stress[k];
+      }
     }
   }
 
