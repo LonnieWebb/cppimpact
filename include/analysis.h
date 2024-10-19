@@ -476,10 +476,9 @@ class FEAnalysis {
     return volume;
   }
 
-  static void calculate_stress_strain(const T *element_xloc,
-                                      const T *element_dof, const T *pt,
-                                      T *strain, T *stress,
-                                      BaseMaterial<T, dof_per_node> *material) {
+  static CPPIMPACT_FUNCTION void calculate_stress_strain(
+      const T *element_xloc, const T *element_dof, const T *pt, T *strain,
+      T *stress, BaseMaterial<T, dof_per_node> *material) {
     T J[spatial_dim * spatial_dim];
     Basis::template eval_grad<spatial_dim>(pt, element_xloc, J);
 
@@ -487,18 +486,10 @@ class FEAnalysis {
     T Jinv[spatial_dim * spatial_dim];
     T detJ = inv3x3(J, Jinv);
 
-    T J_PU[spatial_dim * spatial_dim];
-    memset(J_PU, 0, spatial_dim * spatial_dim * sizeof(T));
-    Basis::template eval_grad_PU<spatial_dim>(pt, element_xloc, J_PU);
-
-    T Jinv_PU[spatial_dim * spatial_dim];
-    memset(Jinv_PU, 0, spatial_dim * spatial_dim * sizeof(T));
-    T detJ_PU = inv3x3(J_PU, Jinv_PU);
-
     // Compute the B matrix
     T B_matrix[6 * spatial_dim * nodes_per_element];
     memset(B_matrix, 0, 6 * spatial_dim * nodes_per_element * sizeof(T));
-    Basis::calculate_B_matrix(Jinv_PU, pt, B_matrix);
+    Basis::calculate_B_matrix(Jinv, pt, B_matrix);
 
     // multiply B*u
     cppimpact_gemv<T, MatOp::NoTrans>(6, dof_per_element, 1.0, B_matrix,

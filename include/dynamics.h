@@ -15,6 +15,30 @@
 // TODO: Make wall optional
 template <typename T, class Basis, class Analysis, class Quadrature>
 class Dynamics {
+ private:
+  void probe_node_data(int node_id, std::ostringstream &stream) {
+    if (node_id < 0 || node_id >= mesh->num_nodes) {
+      stream << "Node ID out of range.\n";
+      return;
+    }
+    T x = global_xloc[3 * node_id];
+    T y = global_xloc[3 * node_id + 1];
+    T z = global_xloc[3 * node_id + 2];
+    T vx = vel[3 * node_id];
+    T vy = vel[3 * node_id + 1];
+    T vz = vel[3 * node_id + 2];
+    T ax = global_acc[3 * node_id];
+    T ay = global_acc[3 * node_id + 1];
+    T az = global_acc[3 * node_id + 2];
+    T mx = global_mass[3 * node_id];
+    T my = global_mass[3 * node_id + 1];
+    T mz = global_mass[3 * node_id + 2];
+    stream << "  Position: (" << x << ", " << y << ", " << z << ")\n"
+           << "  Velocity: (" << vx << ", " << vy << ", " << vz << ")\n"
+           << "  Acceleration: (" << ax << ", " << ay << ", " << az << ")\n"
+           << "  Mass: (" << mx << ", " << my << ", " << mz << ")\n";
+  }
+
  public:
   int *reduced_nodes;
   int reduced_dofs_size;
@@ -35,6 +59,7 @@ class Dynamics {
   T *global_acc;
   T *global_mass;
   T *vel_i;
+  int timestep;
 
   Dynamics(Mesh<T, nodes_per_element> *input_mesh,
            BaseMaterial<T, dof_per_node> *input_material,
@@ -228,6 +253,53 @@ class Dynamics {
     std::cout << "Exported " << filename << std::endl;
   }
 
+  void probe_node(int node_id) {
+    std::string filename =
+        "../output/nodes/node_" + std::to_string(node_id) + ".txt";
+    // Check if the timestep is 0 and if the file exists, then delete it
+    if (timestep == 0) {
+      std::remove(filename.c_str());  // Remove the file if it exists
+    }
+    std::ofstream file;
+    file.open(filename, std::ios::app);  // Open file in append mode
+    std::ostringstream node_data;
+    probe_node_data(node_id, node_data);  // Gather node data
+    // Now write the timestep and current simulation time along with node data
+    // to the file
+    file << "Timestep " << timestep << ", Time: " << std::fixed
+         << std::setprecision(2) << time << "s:\n";
+    file << node_data.str() << "\n";  // Write the populated node data
+    file.close();
+  }
+
+  // Function to probe details about a specific element and output to a file
+  void probe_element(int element_id) {
+    if (element_id < 0 || element_id >= mesh->num_elements) {
+      std::cerr << "Element ID out of range.\n";
+      return;
+    }
+    std::string filename =
+        "../output/elements/element_" + std::to_string(element_id) + ".txt";
+    // Check if the timestep is 0 and if the file exists, then delete it
+    if (timestep == 0) {
+      std::remove(filename.c_str());  // Remove the file if it exists
+    }
+    std::ofstream file;
+    file.open(filename, std::ios::app);  // Open file in append mode
+    int *nodes = &mesh->element_nodes[nodes_per_element * element_id];
+
+    file << "Timestep " << timestep << ", Time: " << std::fixed
+         << std::setprecision(2) << time << "s:\n"
+         << "Element " << element_id << " consists of nodes:\n";
+    for (int i = 0; i < nodes_per_element; ++i) {
+      std::ostringstream node_data;
+      probe_node_data(nodes[i], node_data);  // Gather node data
+      file << " Node " << nodes[i] << " details:\n" << node_data.str();
+    }
+    file << "\n";
+    file.close();
+  }
+
   void debug_strain(const T alpha, const int def_case) {
     memcpy(global_xloc, mesh->xloc,
            ndof * sizeof(T));  // mesh->xloc will store initial positions
@@ -396,8 +468,6 @@ class Dynamics {
     //------------------- End of Initialization -------------------
     // ------------------- Start of Time Loop -------------------
 
-    int timestep = 0;
-
     while (time <= time_end) {
       printf("Time: %f\n", time);
 
@@ -434,6 +504,7 @@ class Dynamics {
 
       if (timestep % export_interval == 0) {
         export_to_vtk(timestep, vel_i, global_acc, global_mass);
+        probe_node(96);
       }
       time += dt;
       timestep += 1;

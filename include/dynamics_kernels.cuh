@@ -14,6 +14,7 @@ __global__ void update(int num_elements, T dt,
                        Wall<T, 2, Basis> *d_wall, const int *d_element_nodes,
                        const T *d_vel, const T *d_global_xloc,
                        const T *d_global_dof, T *d_global_acc, T *d_global_mass,
+                       T *d_global_strains, T *d_global_stress,
                        const int nodes_per_elem_num_quad, T time) {
   int constexpr dof_per_element = spatial_dim * nodes_per_element;
 
@@ -26,6 +27,8 @@ __global__ void update(int num_elements, T dt,
   __shared__ T element_acc[dof_per_element];
   __shared__ T element_vel[dof_per_element];
   __shared__ T element_internal_forces[dof_per_element];
+  __shared__ T element_strain[nodes_per_element * 6];
+  __shared__ T element_stress[nodes_per_element * 6];
   __shared__ int this_element_nodes[nodes_per_element];
 
   int tid = threadIdx.x;
@@ -37,6 +40,11 @@ __global__ void update(int num_elements, T dt,
     element_acc[tid] = 0.0;
     element_vel[tid] = 0.0;
     element_internal_forces[tid] = 0.0;
+  }
+
+  if (tid < nodes_per_element * 6) {
+    element_strain[tid] = 0.0;
+    element_stress[tid] = 0.0;
   }
 
   __syncthreads();
@@ -106,6 +114,27 @@ __global__ void update(int num_elements, T dt,
   // assemble global acceleration
   if (tid < dof_per_element) {
     atomicAdd(&d_global_acc[3 * node + k], element_acc[3 * j + k]);
+  }
+  __syncthreads();
+
+  if (tid == 0) {
+    T pt[3] = {0.0, 0.0, 0.0};
+    Analysis::calculate_stress_strain(element_xloc, element_dof, pt,
+                                      element_strain, element_stress,
+                                      d_material);
+  }
+  __syncthreads();
+  if (tid < 24) {
+    int node_idx = tid / 6;  // Node index within the element (0 to 3)
+    int comp_idx = tid % 6;  // Strain/stress component index (0 to 5)
+
+    int global_node_idx = this_element_nodes[node_idx];
+
+    // Assign strain component
+    d_global_strains[global_node_idx * 6 + comp_idx] = element_strain[comp_idx];
+
+    // Assign stress component
+    d_global_stress[global_node_idx * 6 + comp_idx] = element_stress[comp_idx];
   }
   __syncthreads();
 }
