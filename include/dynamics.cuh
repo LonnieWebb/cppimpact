@@ -399,9 +399,6 @@ class Dynamics {
                                             d_global_xloc, d_global_dof,
                                             d_global_mass, d_global_acc);
 
-    // TODO: delete this
-    cudaDeviceSynchronize();
-
     cudaMemcpy(global_acc, d_global_acc, sizeof(T) * ndof,
                cudaMemcpyDeviceToHost);
     cudaMemcpy(global_xloc, d_global_xloc, sizeof(T) * ndof,

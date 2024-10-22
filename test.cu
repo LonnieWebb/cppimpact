@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
   std::vector<std::string> node_set_names;
   // Load in the mesh
   // std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
-  std::string filename("../input/fuselage 77259 elements.inp");
+  std::string filename("../input/fuselage 5086 elements.inp");
 
   Mesh<T, Basis::nodes_per_element> tensile;
 
@@ -64,7 +64,12 @@ int main(int argc, char *argv[]) {
   std::string name = "AL6061";
 
   Elastoplastic<T, dof_per_node> material(E, rho, nu, beta, H, Y0, name);
-  tensile.load_mesh(filename);
+  printf("Material: %s\n", name.c_str());
+  int load_success = tensile.load_mesh(filename);
+  if (load_success != 0) {
+    std::cerr << "Error loading mesh" << std::endl;
+    return 1;
+  }
 
   // Set the number of degrees of freedom
 
@@ -80,7 +85,7 @@ int main(int argc, char *argv[]) {
 
   int export_interval = INT_MAX;
 #ifdef CPPIMPACT_DEBUG_MODE
-  export_interval = 20;
+  export_interval = 100;
 #endif
 
   Wall<T, 2, Basis> w(wall_name, location, E * 10, tensile.slave_nodes,

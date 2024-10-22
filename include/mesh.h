@@ -54,7 +54,7 @@ class Mesh {
   }
 
   // Main Parsing Logic
-  void load_mesh(std::string filename) {
+  int load_mesh(std::string filename) {
     // Data Structures
     struct Node {
       int index;
@@ -74,6 +74,7 @@ class Mesh {
     std::ifstream meshFile(filename);
     if (!meshFile.is_open()) {
       std::cerr << "Failed to open file: " << filename << std::endl;
+      return 1;
     }
 
     std::string line;
@@ -177,6 +178,7 @@ class Mesh {
             line);  // Add a trailing comma to ensure the last token is parsed.
         std::string token;
         std::regex numberPattern("^\\d+$");
+
         while (std::getline(iss, token, ',')) {
           token = trim(token);
 
@@ -241,8 +243,14 @@ class Mesh {
 
     // Account for the mesh indexing starting at 1
 
-    for (int i = 0; i < nodeSetStarts[nodeSets.size()]; i++) {
-      flatNodeSetIndices[i] = flatNodeSetIndices[i] - 1;
+    if (nodeSets.size() == 0) {
+      printf(
+          "No slave node sets found. Walls will have no effect on "
+          "simulation.\n");
+    } else {
+      for (int i = 0; i < nodeSetStarts[nodeSets.size()]; i++) {
+        flatNodeSetIndices[i] = flatNodeSetIndices[i] - 1;
+      }
     }
 
     num_node_sets = nodeSets.size();
@@ -252,20 +260,10 @@ class Mesh {
     node_set_indices = flatNodeSetIndices;
     node_set_names = node_set_names_temp;
 
-    // Update fixed boundary conditions
     collect_fixed_nodes();
     collect_slave_nodes();
-    // Print values in element_nodes
-    // for (int i = 0; i < 30; i++) {
-    //   std::cout << element_nodes[i] << " ";
-    // }
-    // std::cout << std::endl;
 
-    // // Print the first 30 values of slave nodes
-    // for (int i = 0; i < 30 && i < num_slave_nodes; i++) {
-    //   std::cout << slave_nodes[i] << " ";
-    // }
-    // std::cout << std::endl;
+    return 0;
   }
 
  private:
