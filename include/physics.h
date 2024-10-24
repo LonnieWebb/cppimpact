@@ -1,8 +1,42 @@
 #pragma once
 #include <cmath>
 
+#include "cppimpact_defs.h"
+
+// we need 3 threads
+// caution: det assumed be zero-initialized
 template <typename T>
-inline T inv3x3(const T A[], T Ainv[]) {
+__device__ inline void det3x3_gpu(int tid, const T A[], T& det) {
+  constexpr int det_indices[3][4] = {{0, 4, 3, 1}, {0, 5, 3, 2}, {1, 5, 2, 4}};
+  constexpr int det_coeffs[3] = {8, 7, 6};
+  constexpr int det_signs[3] = {1, -1, 1};
+  atomicAdd(&det, det_signs[tid] * A[det_coeffs[tid]] *
+                      (A[det_indices[tid][0]] * A[det_indices[tid][1]] -
+                       A[det_indices[tid][2]] * A[det_indices[tid][3]]));
+}
+
+template <typename T>
+__device__ inline T det3x3_simple(const T A[]) {
+  return A[0] * (A[4] * A[8] - A[5] * A[7]) -
+         A[1] * (A[3] * A[8] - A[5] * A[6]) +
+         A[2] * (A[3] * A[7] - A[4] * A[6]);
+}
+
+// we need 9 threads
+template <typename T>
+__device__ inline void inv3x3_gpu(int tid, const T A[], T Ainv[], T det) {
+  constexpr int indices[9][4] = {{4, 8, 5, 7}, {1, 8, 2, 7}, {1, 5, 2, 4},
+                                 {3, 8, 5, 6}, {0, 8, 2, 6}, {0, 5, 2, 3},
+                                 {3, 7, 4, 6}, {0, 7, 1, 6}, {0, 4, 1, 3}};
+
+  Ainv[tid] = (tid % 2 ? -1 : 1) *
+              (A[indices[tid][0]] * A[indices[tid][1]] -
+               A[indices[tid][2]] * A[indices[tid][3]]) /
+              det;
+}
+
+template <typename T>
+CPPIMPACT_FUNCTION inline T inv3x3(const T A[], T Ainv[]) {
   T det =
       (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
        A[6] * (A[1] * A[5] - A[2] * A[4]));
@@ -24,7 +58,7 @@ inline T inv3x3(const T A[], T Ainv[]) {
 }
 
 template <typename T>
-inline void transpose3x3(const T A[], T At[]) {
+CPPIMPACT_FUNCTION inline void transpose3x3(const T A[], T At[]) {
   // The diagonal elements are the same for the matrix and its transpose.
   At[0] = A[0];  // Row 1, Col 1
   At[4] = A[4];  // Row 2, Col 2
@@ -40,7 +74,7 @@ inline void transpose3x3(const T A[], T At[]) {
 }
 
 template <typename T>
-inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
+CPPIMPACT_FUNCTION inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
   C[6] = A[6] * B[0] + A[7] * B[3] + A[8] * B[6];
@@ -55,7 +89,8 @@ inline void mat3x3MatMult(const T A[], const T B[], T C[]) {
 }
 
 template <typename T>
-inline void mat3x3MatTransMult(const T A[], const T B[], T C[]) {
+CPPIMPACT_FUNCTION inline void mat3x3MatTransMult(const T A[], const T B[],
+                                                  T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
   C[6] = A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
@@ -70,14 +105,14 @@ inline void mat3x3MatTransMult(const T A[], const T B[], T C[]) {
 }
 
 template <typename T>
-inline T det3x3(const T A[]) {
+CPPIMPACT_FUNCTION inline T det3x3(const T A[]) {
   return (A[8] * (A[0] * A[4] - A[3] * A[1]) -
           A[7] * (A[0] * A[5] - A[3] * A[2]) +
           A[6] * (A[1] * A[5] - A[2] * A[4]));
 }
 
 template <typename T>
-inline void det3x3Sens(const T A[], T Ad[]) {
+CPPIMPACT_FUNCTION inline void det3x3Sens(const T A[], T Ad[]) {
   Ad[0] = A[8] * A[4] - A[7] * A[5];
   Ad[1] = A[6] * A[5] - A[8] * A[3];
   Ad[2] = A[7] * A[3] - A[6] * A[4];
@@ -92,7 +127,7 @@ inline void det3x3Sens(const T A[], T Ad[]) {
 }
 
 template <typename T>
-inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
+CPPIMPACT_FUNCTION inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
   Ad[0] += s * (A[8] * A[4] - A[7] * A[5]);
   Ad[1] += s * (A[6] * A[5] - A[8] * A[3]);
   Ad[2] += s * (A[7] * A[3] - A[6] * A[4]);
@@ -107,7 +142,7 @@ inline void addDet3x3Sens(const T s, const T A[], T Ad[]) {
 }
 
 template <typename T>
-inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
+CPPIMPACT_FUNCTION inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
   // Ad[0] = s*(A[8]*A[4] - A[7]*A[5]);
   Ad[0] = 0.0;
   Ad[1] = 0.0;
@@ -130,7 +165,6 @@ inline void det3x32ndSens(const T s, const T A[], T Ad[]) {
   Ad[6] = s * A[5];
   Ad[7] = 0.0;
   Ad[8] = -s * A[3];
-  ;
   Ad += 9;
 
   // Ad[2] += s*(A[7]*A[3] - A[6]*A[4]);

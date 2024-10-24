@@ -1,0 +1,3 @@
+[submodule "extern/NVTX"]
+	path = extern/NVTX
+	url = https://github.com/NVIDIA/NVTX.git

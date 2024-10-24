@@ -1,32 +1,72 @@
-# Set the default build type to Debug if it's not specified
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
-
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
 project(CPPImpact LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(CMAKE_CUDA_ARCHITECTURES 89)
 
-add_compile_options(-g)
+# Set GPU architectures
+set(GPU_ARCHS "80")
+if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
+  set(GPU_ARCHS "${GPU_ARCHS};80")
+endif()
 
-
-add_executable(test test.cpp)
-# add_executable(derivatives_verification derivatives_verification.cu)
-
-# set_target_properties(test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-# set_target_properties(derivatives_verification PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-# target_compile_options(derivatives_verification PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
-
-# Find CUDA Toolkit
-# find_package(CUDAToolkit REQUIRED)
-# Find LAPACK/BLAS
+# Find LAPACK
 find_package(LAPACK REQUIRED)
 
-# Link LAPACK/BLAS libraries
-target_link_libraries(test ${LAPACK_LIBRARIES})
+# Option for debug mode
+option(CPPIMPACT_DEBUG_MODE "Enable debug mode" OFF)
+if(CPPIMPACT_DEBUG_MODE)
+  add_definitions(-DCPPIMPACT_DEBUG_MODE)
+endif()
 
-# Link CUDA Toolkit libraries (if needed)
-# target_link_libraries(test CUDA::cudart)
+# Enable testing
+enable_testing()
+
+# Define basis types, input files, and deformations
+set(BASIS_TYPES "linear" "quadratic")
+set(INPUT_FILES 0 1)
+set(DEFORMATIONS 0 1)
+
+# Loop over basis types
+foreach(BASIS ${BASIS_TYPES})
+  # Set the basis macro
+  if(BASIS STREQUAL "linear")
+    set(BASIS_MACRO "USE_LINEAR_BASIS")
+  elseif(BASIS STREQUAL "quadratic")
+    set(BASIS_MACRO "USE_QUADRATIC_BASIS")
+  endif()
+
+  # Create a target for each basis type
+  set(TARGET_NAME "FEA_debug_${BASIS}")
+  add_executable(${TARGET_NAME} FEA_debug.cu)
+  # Always enable debug mode for test targets
+  target_compile_definitions(${TARGET_NAME} PRIVATE -D${BASIS_MACRO} -DCPPIMPACT_DEBUG_MODE)
+  target_link_libraries(${TARGET_NAME} ${LAPACK_LIBRARIES})
+
+  # Loop over INPUT_FILES and DEFORMATIONS
+  foreach(INPUT_FILE ${INPUT_FILES})
+    foreach(DEFORMATION ${DEFORMATIONS})
+      # Define a unique test name
+      set(TEST_NAME "Test_${BASIS}_Input${INPUT_FILE}_Def${DEFORMATION}")
+
+      # Add test
+      add_test(NAME ${TEST_NAME}
+               COMMAND ${TARGET_NAME} ${INPUT_FILE} ${DEFORMATION}
+               WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+    endforeach()
+  endforeach()
+endforeach()
+
+# C++ target (cpu_test)
+add_executable(cpu_test test.cu)
+target_link_libraries(cpu_test ${LAPACK_LIBRARIES})
+# The global CPPIMPACT_DEBUG_MODE option applies to cpu_test
+
+# GPU target (gpu_test)
+add_executable(gpu_test test.cu)
+set_target_properties(gpu_test PROPERTIES CUDA_ARCHITECTURES ${GPU_ARCHS})
+set_target_properties(gpu_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_compile_definitions(gpu_test PRIVATE -DCPPIMPACT_CUDA_BACKEND)
+target_compile_options(gpu_test PRIVATE -G)  # device debug
+# The global CPPIMPACT_DEBUG_MODE option applies to gpu_test
