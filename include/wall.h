@@ -33,6 +33,7 @@ class Wall {
 
   ~Wall() {}
 
+  // TODO: Use slave nodes
   CPPIMPACT_FUNCTION void detect_contact(T *global_acc, int node_idx,
                                          T *node_pos, T *node_mass) {
     T wall_distance = (node_pos[dim] - location) * normal;

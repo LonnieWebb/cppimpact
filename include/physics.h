@@ -15,6 +15,13 @@ __device__ inline void det3x3_gpu(int tid, const T A[], T& det) {
                        A[det_indices[tid][2]] * A[det_indices[tid][3]]));
 }
 
+template <typename T>
+__device__ inline T det3x3_simple(const T A[]) {
+  return A[0] * (A[4] * A[8] - A[5] * A[7]) -
+         A[1] * (A[3] * A[8] - A[5] * A[6]) +
+         A[2] * (A[3] * A[7] - A[4] * A[6]);
+}
+
 // we need 9 threads
 template <typename T>
 __device__ inline void inv3x3_gpu(int tid, const T A[], T Ainv[], T det) {

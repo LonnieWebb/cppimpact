@@ -16,9 +16,31 @@
 
 template <typename T, class Basis, class Analysis, class Quadrature>
 class Dynamics {
- public:
-  Mesh<T> *mesh;
+ private:
+  void probe_node_data(int node_id, std::ostringstream &stream) {
+    if (node_id < 0 || node_id >= mesh->num_nodes) {
+      stream << "Node ID out of range.\n";
+      return;
+    }
+    T x = global_xloc[3 * node_id];
+    T y = global_xloc[3 * node_id + 1];
+    T z = global_xloc[3 * node_id + 2];
+    T vx = vel[3 * node_id];
+    T vy = vel[3 * node_id + 1];
+    T vz = vel[3 * node_id + 2];
+    T ax = global_acc[3 * node_id];
+    T ay = global_acc[3 * node_id + 1];
+    T az = global_acc[3 * node_id + 2];
+    T mx = global_mass[3 * node_id];
+    T my = global_mass[3 * node_id + 1];
+    T mz = global_mass[3 * node_id + 2];
+    stream << "  Position: (" << x << ", " << y << ", " << z << ")\n"
+           << "  Velocity: (" << vx << ", " << vy << ", " << vz << ")\n"
+           << "  Acceleration: (" << ax << ", " << ay << ", " << az << ")\n"
+           << "  Mass: (" << mx << ", " << my << ", " << mz << ")\n";
+  }
 
+ public:
   int *reduced_nodes;
   int reduced_dofs_size;
   int ndof;
@@ -26,12 +48,21 @@ class Dynamics {
   static constexpr int spatial_dim = Basis::spatial_dim;
   static constexpr int num_quadrature_pts = Quadrature::num_quadrature_pts;
   static constexpr int dof_per_node = spatial_dim;
+  Mesh<T, nodes_per_element> *mesh;
   BaseMaterial<T, dof_per_node> *material;
   Wall<T, 2, Basis> *wall;
   T *global_xloc;
   T *vel;
+  T *global_strains;
+  T *global_stress;
+  T *global_dof;
+  T *global_acc;
+  T *global_mass;
+  T *vel_i;
+  int timestep;
 
-  Dynamics(Mesh<T> *input_mesh, BaseMaterial<T, dof_per_node> *input_material,
+  Dynamics(Mesh<T, nodes_per_element> *input_mesh,
+           BaseMaterial<T, dof_per_node> *input_material,
            Wall<T, 2, Basis> *input_wall = nullptr)
       : mesh(input_mesh),
         material(input_material),
@@ -41,8 +72,13 @@ class Dynamics {
         vel(new T[mesh->num_nodes * dof_per_node]),
         global_xloc(
             new T[mesh->num_nodes *
-                  dof_per_node])  // Allocate memory for global_xloc here
-  {
+                  dof_per_node]),  // Allocate memory for global_xloc here
+        global_strains(new T[mesh->num_nodes * 6]),
+        global_stress(new T[mesh->num_nodes * 6]),
+        global_dof(new T[mesh->num_nodes * dof_per_node]),
+        global_acc(new T[mesh->num_nodes * dof_per_node]),
+        global_mass(new T[mesh->num_nodes * dof_per_node]),
+        vel_i(new T[mesh->num_nodes * dof_per_node]) {
     ndof = mesh->num_nodes * dof_per_node;
   }
 
@@ -50,6 +86,12 @@ class Dynamics {
     delete[] reduced_nodes;
     delete[] vel;
     delete[] global_xloc;
+    delete[] global_strains;
+    delete[] global_stress;
+    delete[] global_dof;
+    delete[] global_acc;
+    delete[] global_mass;
+    delete[] vel_i;
   }
 
   // Initialize the body. Move the mesh origin to init_position and give all
@@ -68,8 +110,7 @@ class Dynamics {
     }
   }
 
-  void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i,
-                     T *global_xloc) {
+  void export_to_vtk(int timestep, T *vel_i, T *acc_i, T *mass_i) {
     const std::string directory = "../gpu_output";
     const std::string filename =
         directory + "/simulation_" + std::to_string(timestep) + ".vtk";
@@ -84,7 +125,7 @@ class Dynamics {
     vtkFile << "FEA simulation data\n";
     vtkFile << "ASCII\n";
     vtkFile << "DATASET UNSTRUCTURED_GRID\n";
-    const double threshold = 1e6;
+    const double threshold = 1e15;
 
     vtkFile << "POINTS " << mesh->num_nodes << " float\n";
     for (int i = 0; i < mesh->num_nodes; ++i) {
@@ -149,6 +190,22 @@ class Dynamics {
       }
     }
 
+    // First part of the strain
+    vtkFile << "VECTORS strain1 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_strains[6 * i + 0] << " "    // First component (e_xx)
+              << global_strains[6 * i + 1] << " "    // Second component (e_yy)
+              << global_strains[6 * i + 2] << "\n";  // Third component (e_zz)
+    }
+
+    // Second part of the strain
+    vtkFile << "VECTORS strain2 double\n";
+    for (int i = 0; i < mesh->num_nodes; ++i) {
+      vtkFile << global_strains[6 * i + 3] << " "    // Fourth component (e_xy)
+              << global_strains[6 * i + 4] << " "    // Fifth component (e_xz)
+              << global_strains[6 * i + 5] << "\n";  // Sixth component (e_yz)
+    }
+
     vtkFile << "VECTORS acceleration double\n";
     for (int i = 0; i < mesh->num_nodes; ++i) {
       for (int j = 0; j < 3; ++j) {
@@ -178,17 +235,52 @@ class Dynamics {
     std::cout << "Exported " << filename << std::endl;
   }
 
-  // void add_element_vec_3D(const int this_element_nodes[], T *element_vec,
-  //                         T *global_vec)
-  // {
-  //   for (int j = 0; j < nodes_per_element; j++)
-  //   {
-  //     int node = this_element_nodes[j];
-  //     global_vec[3 * node] += element_vec[3 * j];
-  //     global_vec[3 * node + 1] += element_vec[3 * j + 1];
-  //     global_vec[3 * node + 2] += element_vec[3 * j + 2];
-  //   }
-  // }
+  void probe_node(int node_id) {
+    std::string filename =
+        "../output/nodes/node_" + std::to_string(node_id) + ".txt";
+    // Check if the timestep is 0 and if the file exists, then delete it
+    if (timestep == 0) {
+      std::remove(filename.c_str());  // Remove the file if it exists
+    }
+    std::ofstream file;
+    file.open(filename, std::ios::app);  // Open file in append mode
+    std::ostringstream node_data;
+    probe_node_data(node_id, node_data);  // Gather node data
+    // Now write the timestep and current simulation time along with node data
+    // to the file
+    file << "Timestep " << timestep << ", Time: " << std::fixed
+         << std::setprecision(2) << time << "s:\n";
+    file << node_data.str() << "\n";  // Write the populated node data
+    file.close();
+  }
+
+  // Function to probe details about a specific element and output to a file
+  void probe_element(int element_id) {
+    if (element_id < 0 || element_id >= mesh->num_elements) {
+      std::cerr << "Element ID out of range.\n";
+      return;
+    }
+    std::string filename =
+        "../output/elements/element_" + std::to_string(element_id) + ".txt";
+    // Check if the timestep is 0 and if the file exists, then delete it
+    if (timestep == 0) {
+      std::remove(filename.c_str());  // Remove the file if it exists
+    }
+    std::ofstream file;
+    file.open(filename, std::ios::app);  // Open file in append mode
+    int *nodes = &mesh->element_nodes[nodes_per_element * element_id];
+
+    file << "Timestep " << timestep << ", Time: " << std::fixed
+         << std::setprecision(2) << time << "s:\n"
+         << "Element " << element_id << " consists of nodes:\n";
+    for (int i = 0; i < nodes_per_element; ++i) {
+      std::ostringstream node_data;
+      probe_node_data(nodes[i], node_data);  // Gather node data
+      file << " Node " << nodes[i] << " details:\n" << node_data.str();
+    }
+    file << "\n";
+    file.close();
+  }
 
   void allocate() {
     // allocate global data on device
@@ -200,6 +292,8 @@ class Dynamics {
     cudaMalloc(&d_global_xloc, sizeof(T) * ndof);
     cudaMalloc(&d_element_nodes,
                sizeof(int) * nodes_per_element * mesh->num_elements);
+    cudaMalloc(&d_global_strains, sizeof(T) * mesh->num_nodes * 6);
+    cudaMalloc(&d_global_stress, sizeof(T) * mesh->num_nodes * 6);
 
     cudaMalloc((void **)&d_material, sizeof(decltype(*material)));
     cudaMalloc((void **)&d_wall, sizeof(decltype(*d_wall)));
@@ -212,6 +306,9 @@ class Dynamics {
     cudaMemset(d_global_acc, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_global_mass, T(0.0), sizeof(T) * ndof);
     cudaMemset(d_vel_i, T(0.0), sizeof(T) * ndof);
+
+    cudaMemset(d_global_strains, T(0.0), sizeof(T) * mesh->num_nodes * 6);
+    cudaMemset(d_global_stress, T(0.0), sizeof(T) * mesh->num_nodes * 6);
 
     cudaMemcpy(d_global_xloc, mesh->xloc, ndof * sizeof(T),
                cudaMemcpyHostToDevice);
@@ -248,6 +345,8 @@ class Dynamics {
     cudaFree(d_material);
     cudaFree(d_wall);
     cudaFree(d_wall_slave_node_indices);
+    cudaFree(d_global_strains);
+    cudaFree(d_global_stress);
   }
 
   void solve(double dt, double time_end, int export_interval) {
@@ -278,22 +377,18 @@ class Dynamics {
     // a. A0 = (Fext - Fint(U0))/M
     // Loop over all elements
 
-    // TODO: this is hard-coded for now because nodes_per_element = 10 and
-    // num_quadrature_pts = 5 and 64 > 50, need to properly determine this value
-    // to generalize the code
-    constexpr int threads_per_block = 64;
+    // Rounds up to the nearest multiple of 32
     constexpr int nodes_per_elem_num_quad =
         nodes_per_element * num_quadrature_pts;
+    constexpr int threads_per_block =
+        ((nodes_per_elem_num_quad + 31) / 32) * 32;
 
-    T *vel_i = new T[ndof];
-    T *global_mass = new T[ndof];
-    T *global_acc = new T[ndof];
     T time = 0.0;
-    update<T, spatial_dim, nodes_per_element>
-        <<<mesh->num_elements, threads_per_block>>>(
-            mesh->num_elements, dt, d_material, d_wall, d_element_nodes, d_vel,
-            d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
-            nodes_per_elem_num_quad, time);
+    // update<T, spatial_dim, nodes_per_element>
+    //     <<<mesh->num_elements, threads_per_block>>>(
+    //         mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
+    //         d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
+    //         nodes_per_elem_num_quad, time);
 
     // Do we need this?
     cudaDeviceSynchronize();
@@ -303,9 +398,6 @@ class Dynamics {
     external_forces<T><<<node_blocks, 32>>>(mesh->num_nodes, d_wall,
                                             d_global_xloc, d_global_dof,
                                             d_global_mass, d_global_acc);
-
-    // TODO: delete this
-    cudaDeviceSynchronize();
 
     cudaMemcpy(global_acc, d_global_acc, sizeof(T) * ndof,
                cudaMemcpyDeviceToHost);
@@ -323,11 +415,10 @@ class Dynamics {
     array_to_txt<T>("gpu_vel.txt", vel, ndof);
     array_to_txt<T>("gpu_xloc.txt", global_xloc, ndof);
 
-    int timestep = 0;
     // Time Loop
 
     cudaStream_t *streams;
-    int num_c = 4;
+    int num_c = 6;
     streams = new cudaStream_t[num_c];
 
     for (int c = 0; c < num_c; c++) {
@@ -373,7 +464,7 @@ class Dynamics {
           <<<mesh->num_elements, threads_per_block, 0, streams[0]>>>(
               mesh->num_elements, dt, d_material, d_wall, d_element_nodes,
               d_vel, d_global_xloc, d_global_dof, d_global_acc, d_global_mass,
-              nodes_per_elem_num_quad, time);
+              d_global_strains, d_global_stress, nodes_per_elem_num_quad, time);
       cudaStreamSynchronize(streams[0]);
 
       external_forces<T><<<node_blocks, 32, 0, streams[0]>>>(
@@ -395,12 +486,26 @@ class Dynamics {
                         cudaMemcpyDeviceToHost, streams[2]);
         cudaMemcpyAsync(global_xloc, d_global_xloc, ndof * sizeof(T),
                         cudaMemcpyDeviceToHost, streams[3]);
+        cudaMemcpyAsync(global_strains, d_global_strains,
+                        mesh->num_nodes * 6 * sizeof(T), cudaMemcpyDeviceToHost,
+                        streams[4]);
+        cudaMemcpyAsync(global_stress, d_global_stress,
+                        mesh->num_nodes * 6 * sizeof(T), cudaMemcpyDeviceToHost,
+                        streams[5]);
 
         cudaStreamSynchronize(streams[0]);
         cudaStreamSynchronize(streams[1]);
         cudaStreamSynchronize(streams[2]);
         cudaStreamSynchronize(streams[3]);
-        export_to_vtk(timestep, vel_i, global_acc, global_mass, global_xloc);
+        cudaStreamSynchronize(streams[4]);
+        cudaStreamSynchronize(streams[5]);
+        // TODO: add support for strain output
+        export_to_vtk(timestep, vel_i, global_acc, global_mass);
+        probe_node(13648);
+        probe_node(13649);
+        probe_node(13650);
+        probe_node(13651);
+        probe_node(13652);
       };
 
       time += dt;
@@ -429,6 +534,8 @@ class Dynamics {
   T *d_vel = nullptr;
   T *d_vel_i = nullptr;
   T *d_global_xloc = nullptr;
+  T *d_global_strains = nullptr;
+  T *d_global_stress = nullptr;
 
   int *d_element_nodes = nullptr;
 

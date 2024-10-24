@@ -17,14 +17,19 @@
 #include "include/dynamics.h"
 #endif
 
+// Function to print matrix for manual verification
+void print_matrix(const char *name, const double *matrix, int rows, int cols) {
+  std::cout << name << ":\n";
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < cols; ++j) {
+      std::cout << matrix[i * cols + j] << " ";
+    }
+    std::cout << std::endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
-#ifdef CPPIMPACT_CUDA_BACKEND
-  using T = double;
-#else
-  using T = double;
-#endif
-  using Basis = TetrahedralBasis<T>;
-  using Quadrature = TetrahedralQuadrature;
+  using Quadrature = TetrahedralQuadrature5pts;
   using Physics = NeohookeanPhysics<T>;
   using Analysis = FEAnalysis<T, Basis, Quadrature, Physics>;
 
@@ -44,8 +49,10 @@ int main(int argc, char *argv[]) {
 
   std::vector<std::string> node_set_names;
   // Load in the mesh
-  std::string filename("../input/Dynamics Cube.inp");
-  Mesh<T> tensile;
+  // std::string filename("../input/0.25 cube calculix linear 5758 elem.inp");
+  std::string filename("../input/fuselage 5086 elements.inp");
+
+  Mesh<T, Basis::nodes_per_element> tensile;
 
   // Material Properties
   T E = 68.9E9;  // Pa
@@ -57,26 +64,31 @@ int main(int argc, char *argv[]) {
   std::string name = "AL6061";
 
   Elastoplastic<T, dof_per_node> material(E, rho, nu, beta, H, Y0, name);
-  tensile.load_mesh(filename);
+  printf("Material: %s\n", name.c_str());
+  int load_success = tensile.load_mesh(filename);
+  if (load_success != 0) {
+    std::cerr << "Error loading mesh" << std::endl;
+    return 1;
+  }
 
   // Set the number of degrees of freedom
 
   // Position and velocity in x, y, z
-  T init_position[] = {0, 0, 0.001};
-  T init_velocity[] = {0, 0.0, -0.5};
+  T init_position[] = {0, 0, 0};
+  T init_velocity[] = {0, 0.0, -10};
 
   const int normal = 1;
   std::string wall_name = "Wall";
-  T location = 0;
-  double dt = 1e-6;
-  double time_end = smoke_test ? dt * 100 : 0.268;
+  T location = 0.15 - 0.00005;
+  double dt = 1e-7;
+  double time_end = smoke_test ? dt * 10 : 0.5;
 
   int export_interval = INT_MAX;
 #ifdef CPPIMPACT_DEBUG_MODE
-  export_interval = 10;
+  export_interval = 100;
 #endif
 
-  Wall<T, 2, Basis> w(wall_name, location, E, tensile.slave_nodes,
+  Wall<T, 2, Basis> w(wall_name, location, E * 10, tensile.slave_nodes,
                       tensile.num_slave_nodes, normal);
 
   Dynamics<T, Basis, Analysis, Quadrature> dyna(&tensile, &material, &w);

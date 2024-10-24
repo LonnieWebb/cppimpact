@@ -1,35 +1,72 @@
-# Set the default build type to Debug if it's not specified
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
-
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
 project(NEOHOOKEAN_CUDA LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Set GPU architectures
 set(GPU_ARCHS "80")
 if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
   set(GPU_ARCHS "${GPU_ARCHS};80")
 endif()
 
-set(CPPIMPACT_VNTX_PATH "${CMAKE_SOURCE_DIR}/extern/NVTX/c")
-
+# Find LAPACK
 find_package(LAPACK REQUIRED)
 
-option(CPPIMPACT_DEBUG_MODE "debug" OFF)
-if(CPPIMPACT_DEBUG_MODE MATCHES ON)
+# Option for debug mode
+option(CPPIMPACT_DEBUG_MODE "Enable debug mode" OFF)
+if(CPPIMPACT_DEBUG_MODE)
   add_definitions(-DCPPIMPACT_DEBUG_MODE)
 endif()
 
-# C++ target
+# Enable testing
+enable_testing()
+
+# Define basis types, input files, and deformations
+set(BASIS_TYPES "linear" "quadratic")
+set(INPUT_FILES 0 1)
+set(DEFORMATIONS 0 1)
+
+# Loop over basis types
+foreach(BASIS ${BASIS_TYPES})
+  # Set the basis macro
+  if(BASIS STREQUAL "linear")
+    set(BASIS_MACRO "USE_LINEAR_BASIS")
+  elseif(BASIS STREQUAL "quadratic")
+    set(BASIS_MACRO "USE_QUADRATIC_BASIS")
+  endif()
+
+  # Create a target for each basis type
+  set(TARGET_NAME "FEA_debug_${BASIS}")
+  add_executable(${TARGET_NAME} FEA_debug.cu)
+  # Always enable debug mode for test targets
+  target_compile_definitions(${TARGET_NAME} PRIVATE -D${BASIS_MACRO} -DCPPIMPACT_DEBUG_MODE)
+  target_link_libraries(${TARGET_NAME} ${LAPACK_LIBRARIES})
+
+  # Loop over INPUT_FILES and DEFORMATIONS
+  foreach(INPUT_FILE ${INPUT_FILES})
+    foreach(DEFORMATION ${DEFORMATIONS})
+      # Define a unique test name
+      set(TEST_NAME "Test_${BASIS}_Input${INPUT_FILE}_Def${DEFORMATION}")
+
+      # Add test
+      add_test(NAME ${TEST_NAME}
+               COMMAND ${TARGET_NAME} ${INPUT_FILE} ${DEFORMATION}
+               WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+    endforeach()
+  endforeach()
+endforeach()
+
+# C++ target (cpu_test)
 add_executable(cpu_test test.cu)
 target_link_libraries(cpu_test ${LAPACK_LIBRARIES})
+# The global CPPIMPACT_DEBUG_MODE option applies to cpu_test
 
-# GPU target
+# GPU target (gpu_test)
 add_executable(gpu_test test.cu)
 set_target_properties(gpu_test PROPERTIES CUDA_ARCHITECTURES ${GPU_ARCHS})
 set_target_properties(gpu_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_compile_definitions(gpu_test PRIVATE -DCPPIMPACT_CUDA_BACKEND)
 target_compile_options(gpu_test PRIVATE -G)  # device debug
-# target_link_libraries(gpu_test PRIVATE nvtx3-cpp)
+# The global CPPIMPACT_DEBUG_MODE option applies to gpu_test

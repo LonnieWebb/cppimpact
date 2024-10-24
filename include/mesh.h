@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-template <typename T>
+template <typename T, int nodes_per_element>
 class Mesh {
  public:
   int num_elements, num_nodes, num_node_sets, num_fixed_nodes, num_slave_nodes;
@@ -54,7 +54,7 @@ class Mesh {
   }
 
   // Main Parsing Logic
-  void load_mesh(std::string filename) {
+  int load_mesh(std::string filename) {
     // Data Structures
     struct Node {
       int index;
@@ -74,6 +74,7 @@ class Mesh {
     std::ifstream meshFile(filename);
     if (!meshFile.is_open()) {
       std::cerr << "Failed to open file: " << filename << std::endl;
+      return 1;
     }
 
     std::string line;
@@ -177,6 +178,7 @@ class Mesh {
             line);  // Add a trailing comma to ensure the last token is parsed.
         std::string token;
         std::regex numberPattern("^\\d+$");
+
         while (std::getline(iss, token, ',')) {
           token = trim(token);
 
@@ -192,11 +194,11 @@ class Mesh {
 
     // Convert elements and nodeSets to flat structures
     num_elements = elements.size();
-    int *elem_nodes = new int[10 * num_elements];
+    int *elem_nodes = new int[nodes_per_element * num_elements];
 
     for (const auto &elem : elements) {
-      for (int j = 0; j < 10; j++) {
-        elem_nodes[10 * (elem.second.index - 1) + j] =
+      for (int j = 0; j < nodes_per_element; j++) {
+        elem_nodes[nodes_per_element * (elem.second.index - 1) + j] =
             elem.second.nodeIndices[j] - 1;
       }
     }
@@ -241,8 +243,14 @@ class Mesh {
 
     // Account for the mesh indexing starting at 1
 
-    for (int i = 0; i < nodeSetStarts[nodeSets.size()]; i++) {
-      flatNodeSetIndices[i] = flatNodeSetIndices[i] - 1;
+    if (nodeSets.size() == 0) {
+      printf(
+          "No slave node sets found. Walls will have no effect on "
+          "simulation.\n");
+    } else {
+      for (int i = 0; i < nodeSetStarts[nodeSets.size()]; i++) {
+        flatNodeSetIndices[i] = flatNodeSetIndices[i] - 1;
+      }
     }
 
     num_node_sets = nodeSets.size();
@@ -252,10 +260,10 @@ class Mesh {
     node_set_indices = flatNodeSetIndices;
     node_set_names = node_set_names_temp;
 
-    // Update fixed boundary conditions
     collect_fixed_nodes();
     collect_slave_nodes();
-    // Print all values in element_nodes
+
+    return 0;
   }
 
  private:
@@ -289,6 +297,7 @@ class Mesh {
     }
   }
 
+  // TODO: Handle files without a slave nodeset
   void collect_slave_nodes() {
     num_slave_nodes = 0;
     slave_nodes = nullptr;

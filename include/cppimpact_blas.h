@@ -26,3 +26,5 @@ CPPIMPACT_FUNCTION void cppimpact_gemv(const int m, const int n, const T alpha,
     }
   }
 }
+
+// Mat-mat multiplication, matrix in row major
